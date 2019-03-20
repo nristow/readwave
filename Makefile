@@ -4,3 +4,6 @@ INCROOT2="/usr/include/root"
 
 default: 
 	g++ -g `root-config --libs --glibs ` -I/usr/include/root -I/usr/include/root/ROOT readWave.cpp -o readWave
+
+clean:
+	rm -f readWave
