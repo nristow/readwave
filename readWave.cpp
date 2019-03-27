@@ -26,6 +26,47 @@ struct package
 	std::vector<double> ch3;
 };
 
+/* Function from
+ * http://www.nbi.dk/~petersen/Teaching/Stat2016/PythonRootIntro/ROOT_TipsAndTricks.pdf
+ * */
+
+
+double crystalball(double* x, double *par)
+{
+	//http://en.wikipedia.org/wiki/Crystal_Ball_function   
+	double xcur = x[0];   
+	double alpha = par[0];   
+	double n = par[1];   
+	double mu = par[2];   
+	double sigma = par[3];   
+	double N = par[4];   
+	
+	TF1* exp = new TF1("exp","exp(x)",1e-20,1e20);   
+	
+	double A; 
+	double B;   
+	if (alpha < 0)
+	{     
+		A = pow((n/(-1*alpha)),n)*exp->Eval((-1)*alpha*alpha/2);     
+		B = n/(-1*alpha) + alpha;
+	}   
+	else 
+	{     
+		A = pow((n/alpha),n)*exp->Eval((-1)*alpha*alpha/2);     
+		B = n/alpha - alpha;
+	}
+
+	double f;   
+	if ((xcur-mu)/sigma > (-1)*alpha)     
+		f = N*exp->Eval((-1)*(xcur-mu)*(xcur-mu)/(2*sigma*sigma));   
+	else     
+		f = N*A*pow((B- (xcur-mu)/sigma),(-1*n));   
+	
+	delete exp;   
+	return f; 
+}
+
+
 double Gaus_2sigma( double *x, double*par )
 {
 	double xx = x[0];
@@ -33,8 +74,8 @@ double Gaus_2sigma( double *x, double*par )
 	double mean = par[1];
 	double sigma_1 = par[2];
 	double sigma_2 = par[3];
-	 
-	if( xx < mean ) 
+	double center = par[4]; 
+	if( xx < center ) 
 	{
 		return height*exp( -(xx - mean)*(xx - mean)/(2*sigma_1*sigma_1) );
 	}
@@ -88,6 +129,15 @@ Double_t myfunc(Double_t *x, Double_t *par)
 	return par[0] + par[1]*xx + par[2]*x2 + par[3]*x3 + par[4]*x4 + par[5]*x5 + par[6]*x6;
 }
 
+double linear(Double_t *x, Double_t *par)
+{
+	double slope = par[0];
+	double b = par[1];
+	double xx = x[0];
+
+	return slope*xx+b;
+}
+
 //double newtonRaphson(double x, tf1* function, double EPSILON = 0.001) 
 //{ 
 //    double h = tf1->Eval(x) / tf1->Derivative(x); 
@@ -114,7 +164,6 @@ int main(int argc, char* argv[])
 	const int num = 1000;
 	std::string filebase=argv[1];
         filebase += "/waveform"; 
-	//std::cout << filebase << std::endl;
 	std::vector<package> data; 
 
 	double mina(0),minb(0),minc(0), maxa(0), maxb(0), maxc(0);
@@ -124,7 +173,9 @@ int main(int argc, char* argv[])
 	for(int i=0; i < num ; i++)
 	{
 		std::ifstream file;	
-		file.open(filebase + i + ".txt");
+		std::stringstream ss;
+		ss << filebase << i << ".txt";
+		file.open(ss.str());
 		
 		std::vector<double> time;
 		std::vector<double> ch1;
@@ -145,6 +196,7 @@ int main(int argc, char* argv[])
 			std::stringstream ss(line);
 			double d, a, b, c;
 			ss >> d >> std::ws >> a >> std::ws >> b >> std::ws >> c;
+			/* all 3 channels are inverted */
 			a = -a * scale;
 			b = -b * scale;
 			c = -c * scale;
@@ -267,7 +319,8 @@ int main(int argc, char* argv[])
       	
 	p1->SetOption("hist");
 	p1->SetMarkerColor(kGreen);
-	p1->Draw();
+	p1->Draw("P");
+	
 	double mintimepos = ((TAxis*)p1->GetXaxis())->GetBinCenter(posa);//-1.076E-007+((posa+1)*(4E-10));
 	double maxtimepos = ((TAxis*)p1->GetXaxis())->GetBinCenter(pmaxa);//-1.076E-007+((posa+1)*(4E-10));
 	double maximum(0);
@@ -280,16 +333,31 @@ int main(int argc, char* argv[])
 	
 	
 	std::cout << "Time at which the function is a maximum: " << maxtimepos << std::endl << "Value of the maximum: " << maximum << std::endl;
-	TF1 *f_Gaus_2sigma = new TF1("f_Gaus_2sigma", Gaus_2sigma, 90, 110, 4 );
-	f_Gaus_2sigma->SetParameters(50, 110, 1, 1);
+
+	TF1 *f_Gaus_2sigma = new TF1("f_Gaus_2sigma", Gaus_2sigma, 80, 130, 5 );
+	f_Gaus_2sigma->SetParameters(60, 110, 10, 1, 100.3);
 	//f_Gaus_2sigma->FixParameter(5,maxtimepos);
 	//f_Gaus_2sigma->FixParameter(0,maximum);
-	p1->Fit("f_Gaus_2sigma");
-	f_Gaus_2sigma->Draw("SAME");
+	//p1->Fit("f_Gaus_2sigma");
+	//f_Gaus_2sigma->Draw("SAME");
 
+	TF1 *f = new TF1("sixthorderpoly", myfunc, 80, 130, 7 );
+	f->SetParameters(-285,3.3,1,1,1,1,1);
+	//p1->Fit("sixthorderpoly");
+	//f->Draw("SAME");
+
+	TF1 *f2 = new TF1("linearfit", linear, 0, 200, 2 );
+	f->SetParameters(-285,3.3);
+	//p1->Fit("linearfit");
+	//f2->Draw("SAME");
+	
+	TF1 *f3 = new TF1("CrystalBall", crystalball, 80,130,5);
 	rootapp->Run();	
 	file->Write();	
 	file->Close();
+	delete file, h2, c1, p1,f ,f2;
+	delete f_Gaus_2sigma;
+
 
 	return 0;
 }
