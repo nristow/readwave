@@ -225,7 +225,7 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
-	const int num = 5000;
+	const int num = 1;
 	std::string filebase=argv[1];
         filebase += "/waveform"; 
 	std::vector<package> data; 
@@ -366,7 +366,7 @@ int main(int argc, char* argv[])
 	stats->cd();
 	std::string histname = "PH2";
 	std::string info = "Pulse Height for PMT-1B";
-	TH1D *h1 = new TH1D(histname.c_str(), info.c_str(), 256, smallestmaxch2, maxch2);
+	TH1D *h1 = new TH1D(histname.c_str(), info.c_str(), 254, smallestmaxch2, maxch2);
 	for(int i = 0; i < num ; i++)
 	{
 		h1->Fill(data[i].max[1]);
@@ -378,7 +378,7 @@ int main(int argc, char* argv[])
 	
 	histname = "PH1";
 	info = "Pulse Height for PMT-1A";
-	TH1D *h2 = new TH1D(histname.c_str(), info.c_str(), 256, smallestmaxch1, maxch1);
+	TH1D *h2 = new TH1D(histname.c_str(), info.c_str(), 254, smallestmaxch1, maxch1);
 	for(int i = 0; i < num ; i++)
 	{
 		h2->Fill(data[i].max[0]);
@@ -397,18 +397,37 @@ int main(int argc, char* argv[])
 			std::string histname = "h" + std::to_string(i+1);
 			//std::cout << histname << std::endl;
 			std::string info = "a Pulse";
-			TH2D *h1 = new TH2D(histname.c_str(), info.c_str(), data[0].time.size(), data[0].time.front(), data[0].time.back(), data[i].numunique[j], data[i].min[j], data[i].max[j]); 
+			TH1D *h1 = new TH1D(histname.c_str(), info.c_str(), /*data[i].numunique[j]*/255, data[i].min[j],data[i].max[j]); 
 			if (j == 0)
 			{
 				for(int k = 0; k < data[i].time.size(); k++)
-					h1->Fill(data[i].time[k], data[i].ch1[k]);
+					h1->Fill(data[i].ch1[k]);
 			}
 			else	
 			{
 				for(int k = 0; k < data[i].time.size(); k++)
-					h1->Fill(data[i].time[k], data[i].ch2[k]);
+					h1->Fill(data[i].ch2[k]);
 			}
 
+			h1->Write();
+			delete h1;
+		}
+	}
+	
+	for (int i = 0; i < 1; i++)
+	{
+		
+		TDirectory *bins = file->mkdir("bins");
+		bins->cd();
+		//std::cout << "minimum: " << data[1].min[0];
+		for(int j = 1; j < 1024; j++)
+		{
+			std::string histname = "h" + std::to_string(j);
+			//std::cout << histname << std::endl;
+			std::string info = "a Pulse";
+			TH1D *h1 = new TH1D(histname.c_str(), info.c_str(), j, data[0].min[0], data[0].max[0]); 
+			for(int k = 0; k < data[0].time.size(); k++)
+				h1->Fill(data[0].ch1[k]);
 			h1->Write();
 			delete h1;
 		}
