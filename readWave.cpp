@@ -17,6 +17,7 @@
 #include <root/THStack.h>
 #include <root/TF1.h>
 #include <root/TFile.h>
+#include <root/TSpline.h>
 
 struct package
 {
@@ -24,6 +25,9 @@ struct package
 	std::vector<double> ch1;
 	std::vector<double> ch2;
 	std::vector<double> ch3;
+	std::vector<double> max;
+	std::vector<double> min;
+	std::vector<double> numunique;
 };
 
 /* Function from
@@ -83,6 +87,66 @@ double Gaus_2sigma( double *x, double*par )
 	{
 		return height*exp( -(xx - mean)*(xx - mean)/(2*sigma_2*sigma_2) );
 	}
+}
+
+double Gaus_2mean( double *x, double*par )
+{
+	double xx = x[0];
+	double height = par[0];
+	double mean1 = par[1];
+	double mean2 = par[2];
+	double sigma_1 = par[3];
+	double sigma_2 = par[4];
+	double center = par[5]; 
+	if( xx < center ) 
+	{
+		return height*exp( -(xx - mean1)*(xx - mean1)/(2*sigma_1*sigma_1) );
+	}
+	else
+	{
+		return height*exp( -(xx - mean2)*(xx - mean2)/(2*sigma_2*sigma_2) );
+	}
+}
+
+double cubicSpline(double *x, double *p)
+{
+	double xx = x[0];
+	double x2 = xx*xx;
+	double x3 = x2*xx;
+
+	double split = p[0];
+
+	double f0 = p[1]+p[2]*xx + p[3]*x2 + p[4]*x3;
+	double f1 = p[5]+p[6]*xx + p[8]*x2 + p[8]*x3;
+//	double f2 = p[9]+p[10]*xx + p[11]*x2 + p[12]*x3;
+	
+	if (xx < split)
+		return f0; 
+//	else if (xx == split)
+//		return f0-f1;
+	else
+		return f1;
+
+}
+
+Double_t spline_4nodes(Double_t *x, Double_t *par)
+{
+   /*Fit parameters:
+   par[0-3]=X of nodes (to be fixed in the fit!)
+   par[4-7]=Y of nodes
+   par[8-9]=first derivative at begin and end (to be fixed in the fit!)
+   */
+   Double_t xx = x[0];
+
+   Double_t xn[6] = { par[0], par[1], par[2], par[3], par[4], par[5] };
+   Double_t yn[6] = { par[6], par[7], par[8], par[9], par[10], par[11] };
+
+   Double_t b1 = par[12];
+   Double_t e1 = par[13];
+
+   TSpline3 sp3("sp3", xn, yn, 6, "b1e1", b1, e1);
+
+   return sp3.Eval(xx);
 }
 
 Double_t gaus_lau (Double_t *x, Double_t *par) 
@@ -161,13 +225,11 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
-	const int num = 1000;
+	const int num = 5000;
 	std::string filebase=argv[1];
         filebase += "/waveform"; 
 	std::vector<package> data; 
 
-	double mina(0),minb(0),minc(0), maxa(0), maxb(0), maxc(0);
-	double pmaxa(0),pmaxb(0),pmaxc(0);
 	int posa(0),posb(0),posc(0);
 	
 	for(int i=0; i < num ; i++)
@@ -191,10 +253,13 @@ int main(int argc, char* argv[])
 
 		package temp;
 		const double scale = 1000; // scale to mV level
+		double mina(100),minb(100),minc(100), maxa(-100), maxb(-100), maxc(-100);
+		double pmaxa(0),pmaxb(0),pmaxc(0);
+		double uniquea(0), uniqueb(0), uniquec(0);
 		for (std::string line; std::getline(file, line); )
 		{
 			std::stringstream ss(line);
-			double d, a, b, c;
+			double d(0), a(0), b(0), c(0);
 			ss >> d >> std::ws >> a >> std::ws >> b >> std::ws >> c;
 			/* all 3 channels are inverted */
 			a = -a * scale;
@@ -210,7 +275,7 @@ int main(int argc, char* argv[])
 			{
 				mina = a;
 				posa = temp.ch1.size();
-			}	
+			}
 			if(a > maxa)
 			{
 				maxa = a;
@@ -220,7 +285,7 @@ int main(int argc, char* argv[])
 			{
 				minb = b;
 				posb = temp.ch2.size();
-			}	
+			}
 			if(b > maxb)
 			{
 				maxb = b;
@@ -230,133 +295,150 @@ int main(int argc, char* argv[])
 			{
 				minc = c;
 				posc = temp.ch3.size();
-			}	
+			}
 			if(c > maxc)
 			{
 				maxc = c;
 				pmaxc = temp.ch3.size();
 			}
 
-
 		}
+
+		int n=findUnique(temp.ch1);
+		if (n > uniquea)
+			uniquea = n;
+	
+		n=findUnique(temp.ch2);	
+		if (n > uniqueb)
+			uniqueb = n;
+		n=findUnique(temp.ch3);
+		if (n > uniquec)
+			uniquec = n;
+
+		temp.max.push_back(maxa);
+		temp.max.push_back(maxb);
+		temp.max.push_back(maxc);
+		temp.min.push_back(mina);
+		temp.min.push_back(minb);
+		temp.min.push_back(minc);
+		temp.numunique.push_back(uniquea);
+		temp.numunique.push_back(uniqueb);
+		temp.numunique.push_back(uniquec);
 		data.push_back(temp);
 		file.close();
 	}
 
+//	TApplication* rootapp = new TApplication("PMT timing", &argc, argv);
+	TFile *file  = new TFile("PMT_muon_PEN.root", "RECREATE");
+	TDirectory *ch1 = file->mkdir("ch1");
+	TDirectory *ch2 = file->mkdir("ch2");
+	TDirectory *ch3 = file->mkdir("ch3");
+	TDirectory *directories[] = {ch1, ch2, ch3};
+	TDirectory *stats = file->mkdir("stats");
 
-	int uniquea(0), uniqueb(0), uniquec(0);
+	double uniquech1(0), uniquech2(0), maxch1(0), maxch2(0), smallestmaxch1(180), smallestmaxch2(180), minch1(180), minch2(180);
 	for(int i = 0; i < num; i++)
 	{
-			int temp = findUnique(data[i].ch1);
-			if (temp > uniquea)
-				uniquea = temp;
-			
-			temp = findUnique(data[i].ch2);
-			if (temp > uniqueb)
-				uniqueb = temp;
-			
-			temp = findUnique(data[i].ch3);
-			if (temp > uniquec)
-				uniquec = temp;
-	}		
-
-
-	std::cout << "Unique counts: " << uniquea << "," << uniqueb << "," << uniquec << std::endl;		
-	std::cout << "mina: " << mina << " minb: " << minb << " minc: " << minc << std::endl;
-	std::cout << "maxa: " << maxa << " maxb: " << maxb << " maxc: " << maxc << std::endl;
-	std::cout << "minimum position a: " << posa << " minimum position b: " << posb << " minimum position c: " << posc << std::endl;
-	std::cout << "maximum position a: " << pmaxa << " maximum position b: " << pmaxb << " maximum position c: " << pmaxc << std::endl;
-
-	int maxunique = 0;
-	if (uniquea > uniqueb)
-		maxunique = uniquea;
-	else maxunique = uniqueb;
-	if (maxunique < uniquec)
-		maxunique = uniquec;
-	
-	for(int i =0; i < num; i++)
-		scaleTime(data[i].time);
-
-	double timestart = data[0].time[0];
-	double timeend = data[0].time.back();
-	std::cout << "Time start: " << data[0].time[0] << std::endl;
-	std::cout << "Time end: " << data[0].time.back() << std::endl;
-
-	std::vector<float> timech1;
-	std::vector<float> ch1scaled;
-
-	TApplication* rootapp = new TApplication("PMT timing", &argc, argv);
-	TFile *file  = new TFile("PMT_fit.root", "RECREATE");
-	
-	TCanvas *c2 = new TCanvas("c2","test");	
-	TH2D *h2 = new TH2D("h2", "PMT-1A response from LED pulse", data[0].time.size(), data[0].time.front(), data[0].time.back(), maxunique , mina, maxa);
-
-	for (int j = 0; j < num; j++)
-	{
-		for (int i = 0; i < data[j].time.size(); i++)
-		{
-			h2->Fill(data[j].time[i], data[j].ch1[i]);
-		}
-	}	
-
-	h2->SetMarkerColor(kGray);
-	h2->SetOption("scat");
-	h2->GetYaxis()->SetTitle("Voltage [mV]");
-	h2->GetXaxis()->SetTitle("Time [nS]");
-	h2->Draw();	
-	TCanvas *c1 = new TCanvas("c1","test");	
-	TProfile *p1 = new TProfile("p1", "Profile of CH1", data[0].time.size(), data[0].time.front(), data[0].time.back());
-
-	for (int j = 0; j < num; j++)
-	{
-		for (int i = 0; i < data[j].time.size(); i++)
-		{
-			p1->Fill(data[j].time[i], data[j].ch1[i]);
-		}
-	}	
-
-
-      	
-	p1->SetOption("hist");
-	p1->SetMarkerColor(kGreen);
-	p1->Draw("P");
-	
-	double mintimepos = ((TAxis*)p1->GetXaxis())->GetBinCenter(posa);//-1.076E-007+((posa+1)*(4E-10));
-	double maxtimepos = ((TAxis*)p1->GetXaxis())->GetBinCenter(pmaxa);//-1.076E-007+((posa+1)*(4E-10));
-	double maximum(0);
-	for(int i = 1; i < num; i++)
-	{
-		double temp = p1->GetBinContent(i);
-		if (temp > maximum)
-			maximum = temp;
+		if (data[i].numunique[0] > uniquech1)
+			uniquech1 = data[i].numunique[0];
+		if (data[i].numunique[1] > uniquech2)
+			uniquech2 = data[i].numunique[1];
+		if(data[i].max[0] > maxch1)
+			maxch1 = data[i].max[0];
+		if(data[i].max[1] > maxch2)
+			maxch2 = data[i].max[1];
+		if(data[i].max[0] < smallestmaxch1)
+			smallestmaxch1 = data[i].max[0];
+		if(data[i].max[1] <  smallestmaxch2)
+			smallestmaxch2 = data[i].max[1];
+		if(data[i].min[0] < minch1)
+			minch1 = data[i].min[0];
+		if(data[i].min[1] <  minch2)
+			minch2 = data[i].min[1];
 	}
-	
-	
-	std::cout << "Time at which the function is a maximum: " << maxtimepos << std::endl << "Value of the maximum: " << maximum << std::endl;
 
-	TF1 *f_Gaus_2sigma = new TF1("f_Gaus_2sigma", Gaus_2sigma, 80, 130, 5 );
-	f_Gaus_2sigma->SetParameters(60, 110, 10, 1, 100.3);
-	//f_Gaus_2sigma->FixParameter(5,maxtimepos);
-	//f_Gaus_2sigma->FixParameter(0,maximum);
-	//p1->Fit("f_Gaus_2sigma");
-	//f_Gaus_2sigma->Draw("SAME");
-
-	TF1 *f = new TF1("sixthorderpoly", myfunc, 80, 130, 7 );
-	f->SetParameters(-285,3.3,1,1,1,1,1);
-	//p1->Fit("sixthorderpoly");
-	//f->Draw("SAME");
-
-	TF1 *f2 = new TF1("linearfit", linear, 0, 200, 2 );
-	f->SetParameters(-285,3.3);
-	//p1->Fit("linearfit");
-	//f2->Draw("SAME");
+	std::cout << "Number of unique heights in ch1: " << uniquech1 << " ch2: " << uniquech2 << std::endl;
+	std::cout << "Max height in ch1: " << maxch1 << " ch2: " << maxch2 << std::endl;
+	std::cout << "smallestmax height in ch1: " << smallestmaxch1 << " ch2: " << smallestmaxch2 << std::endl;
 	
-	TF1 *f3 = new TF1("CrystalBall", crystalball, 80,130,5);
-	rootapp->Run();	
+	/* construct histogram of pulse heights */
+	
+	stats->cd();
+	std::string histname = "PH2";
+	std::string info = "Pulse Height for PMT-1B";
+	TH1D *h1 = new TH1D(histname.c_str(), info.c_str(), 256, smallestmaxch2, maxch2);
+	for(int i = 0; i < num ; i++)
+	{
+		h1->Fill(data[i].max[1]);
+	}
+	h1->GetXaxis()->SetTitle("Maximum Waveform Height (mV)");
+	h1->GetYaxis()->SetTitle("Number of waveforms");
+	h1->Write();
+	delete h1;
+	
+	histname = "PH1";
+	info = "Pulse Height for PMT-1A";
+	TH1D *h2 = new TH1D(histname.c_str(), info.c_str(), 256, smallestmaxch1, maxch1);
+	for(int i = 0; i < num ; i++)
+	{
+		h2->Fill(data[i].max[0]);
+	}
+	h2->GetXaxis()->SetTitle("Maximum Waveform Height (mV)");
+	h2->GetYaxis()->SetTitle("Number of waveforms");
+	h2->Write();
+	delete h2;
+
+	/* Construct histogram of all pulses */	
+	for (int i = 0; i < num; i++)
+	{
+		for( int j = 0; j < 2; j++) //per channel
+		{
+			directories[j]->cd();
+			std::string histname = "h" + std::to_string(i+1);
+			//std::cout << histname << std::endl;
+			std::string info = "a Pulse";
+			TH2D *h1 = new TH2D(histname.c_str(), info.c_str(), data[0].time.size(), data[0].time.front(), data[0].time.back(), data[i].numunique[j], data[i].min[j], data[i].max[j]); 
+			if (j == 0)
+			{
+				for(int k = 0; k < data[i].time.size(); k++)
+					h1->Fill(data[i].time[k], data[i].ch1[k]);
+			}
+			else	
+			{
+				for(int k = 0; k < data[i].time.size(); k++)
+					h1->Fill(data[i].time[k], data[i].ch2[k]);
+			}
+
+			h1->Write();
+			delete h1;
+		}
+	}
+//		
+//		
+//		
+//		
+//		
+//		TCanvas *c2 = new TCanvas("c2","test");	
+//		TH2D *h2 = new TH2D("h2", "A Pulse", data[0].time.size(), data[0].time.front(), data[0].time.back(), maxunique , mina, maxa);
+//
+//	for (int j = 0; j < num; j++)
+//	{
+//		for (int i = 0; i < data[j].time.size(); i++)
+//		{
+//			h2->Fill(data[j].time[i], data[j].ch1[i]);
+//		}
+//	}	
+//
+//	h2->SetMarkerColor(kGray);
+//	h2->SetOption("scat");
+//	h2->GetYaxis()->SetTitle("Voltage [mV]");
+//	h2->GetXaxis()->SetTitle("Time [nS]");
+//	h2->Draw();	
+//	
+//	//rootapp->Run();	
 	file->Write();	
 	file->Close();
-	delete file, h2, c1, p1,f ,f2;
-	delete f_Gaus_2sigma;
+	delete file;
 
 
 	return 0;
