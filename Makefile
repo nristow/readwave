@@ -6,8 +6,8 @@ default:
 	g++ -g `root-config --libs --glibs ` -I/usr/include/root -I/usr/include/root/ROOT readWave.cpp -o readWave
 
 run:
-	#`readWave ../waveform_1553105709/` 
-	root PMT_fit.root
+	./readWave ../PMT_led_trigger_waveforms 
+	#root PMT_fit.root
 
 clean:
 	rm -f readWave *.png

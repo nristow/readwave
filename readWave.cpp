@@ -29,6 +29,7 @@ struct package
 	std::vector<double> min;
 	std::vector<double> numunique;
 	std::vector<double> ymulti;
+	double maxdifference;
 };
 
 
@@ -59,12 +60,13 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
-	const int num = 11000;
+	const int num = 5000;
 	std::string filebase=argv[1];
         filebase += "/waveform"; 
 	std::vector<package> data; 
 
 	int posa(0),posb(0),posc(0);
+	bool oldheader = false;
 	
 	for(int i=0; i < num ; i++)
 	{
@@ -79,29 +81,39 @@ int main(int argc, char* argv[])
 		std::vector<double> ch3;
 
 		package temp;
-		for(int i = 0; i < 12; i++)
-		{	
-			std::string line;
-			std::getline(file, line);
-			if(i == 3)
-			{
-				std::stringstream ss(line);
-				std::string trash;
-				std::string ym;
-				ss >> trash >> trash >> trash >> ym; 
-				temp.ymulti.push_back(std::stod(ym));
-			}
-			else if (i == 4)
-			{
-				std::stringstream ss(line);
-				std::string trash;
-				std::string ym;
-				ss >> trash >> trash >> trash >> ym; 
-				temp.ymulti.push_back(std::stod(ym));
-			}
+		if(oldheader == false)
+		{
+			for(int i = 0; i < 12; i++)
+			{	
+				std::string line;
+				std::getline(file, line);
+				if(i == 3)
+				{
+					std::stringstream ss(line);
+					std::string trash;
+					std::string ym;
+					ss >> trash >> trash >> trash >> ym; 
+					temp.ymulti.push_back(std::stod(ym));
+				}
+				else if (i == 4)
+				{
+					std::stringstream ss(line);
+					std::string trash;
+					std::string ym;
+					ss >> trash >> trash >> trash >> ym; 
+					temp.ymulti.push_back(std::stod(ym));
+				}
 
+			}
 		}
-
+		else
+		{
+			for(int i = 0; i < 10; i++)
+			{	
+				std::string line;
+				std::getline(file,line);
+			}
+		}
 		const double scale = 1000; // scale to mV level
 		double mina(100),minb(100),minc(100), maxa(-100), maxb(-100), maxc(-100);
 		double pmaxa(0),pmaxb(0),pmaxc(0);
@@ -110,11 +122,11 @@ int main(int argc, char* argv[])
 		{
 			std::stringstream ss(line);
 			double d(0), a(0), b(0), c(0);
-			ss >> d >> std::ws >> a >> std::ws >> b >> std::ws >> c;
+			ss >> d >> std::ws >> a >> std::ws >> b;
 			/* all 3 channels are inverted */
 			a = -a * scale;
 			b = -b * scale;
-			c = -c * scale;
+			//c = -c * scale;
 			
 			temp.time.push_back(d);
 			temp.ch1.push_back(a);
@@ -141,16 +153,16 @@ int main(int argc, char* argv[])
 				maxb = b;
 				pmaxb = temp.ch2.size();
 			}
-			if(c < minc)
-			{
-				minc = c;
-				posc = temp.ch3.size();
-			}
-			if(c > maxc)
-			{
-				maxc = c;
-				pmaxc = temp.ch3.size();
-			}
+			//if(c < minc)
+			//{
+			//	minc = c;
+			//	posc = temp.ch3.size();
+			//}
+			//if(c > maxc)
+			//{
+			//	maxc = c;
+			//	pmaxc = temp.ch3.size();
+			//}
 
 		}
 
@@ -161,19 +173,19 @@ int main(int argc, char* argv[])
 		n=findUnique(temp.ch2);	
 		if (n > uniqueb)
 			uniqueb = n;
-		n=findUnique(temp.ch3);
-		if (n > uniquec)
-			uniquec = n;
+	//	n=findUnique(temp.ch3);
+	//	if (n > uniquec)
+	//		uniquec = n;
 
 		temp.max.push_back(maxa);
 		temp.max.push_back(maxb);
-		temp.max.push_back(maxc);
+		//temp.max.push_back(maxc);
 		temp.min.push_back(mina);
 		temp.min.push_back(minb);
-		temp.min.push_back(minc);
+		//temp.min.push_back(minc);
 		temp.numunique.push_back(uniquea);
 		temp.numunique.push_back(uniqueb);
-		temp.numunique.push_back(uniquec);
+		//temp.numunique.push_back(uniquec);
 		data.push_back(temp);
 		file.close();
 	}
@@ -205,6 +217,7 @@ int main(int argc, char* argv[])
 			minch1 = data[i].min[0];
 		if(data[i].min[1] <  minch2)
 			minch2 = data[i].min[1];
+		data[i].maxdifference = abs(data[i].max[0] - data[i].max[1]);
 	}
 
 	std::cout << "Number of unique heights in ch1: " << uniquech1 << " ch2: " << uniquech2 << std::endl;
@@ -213,17 +226,20 @@ int main(int argc, char* argv[])
 	
 	/* compute number of bins */
 	
+	if(oldheader == false)
+	{
 	double numbinsch1 = 1000*data[0].ymulti[0];
 	double numbinsch2 = 1000*data[0].ymulti[1];
 	std::cout << "Number of bins ch1: " << numbinsch1 << std::endl;
 	std::cout << "Number of bins ch2: " << numbinsch2 << std::endl;
+	}
 
 	/* construct histogram of pulse heights */
 	
 	stats->cd();
 	std::string histname = "PH2";
 	std::string info = "Pulse Height for PMT-1B";
-	TH1D *h1 = new TH1D(histname.c_str(), info.c_str(), 253, 0, 102);
+	TH1D *h1 = new TH1D(histname.c_str(), info.c_str(), 625, 0, 500.8);
 	for(int i = 0; i < num ; i++)
 	{
 		h1->Fill(data[i].max[1]);
@@ -235,7 +251,7 @@ int main(int argc, char* argv[])
 	
 	histname = "PH1";
 	info = "Pulse Height for PMT-1A";
-	TH1D *h2 = new TH1D(histname.c_str(), info.c_str(), 253, 0, 204);
+	TH1D *h2 = new TH1D(histname.c_str(), info.c_str(), 625, -0.4, 500.4);
 	for(int i = 0; i < num ; i++)
 	{
 		h2->Fill(data[i].max[0]);
@@ -244,6 +260,20 @@ int main(int argc, char* argv[])
 	h2->GetYaxis()->SetTitle("Number of waveforms");
 	h2->Write();
 	delete h2;
+	
+	/* Plot difference in height between all pulses */
+
+	std::string histname2 = "Difference";
+	std::string info2 = "Absolute difference in pulse height";
+	TH1D *h3 = new TH1D(histname2.c_str(), info2.c_str(), 254, 0, 204.4);
+	for(int i = 0; i < num ; i++)
+	{
+		h3->Fill(data[i].maxdifference);
+	}
+	h3->GetXaxis()->SetTitle("Absolute difference (mV)");
+	h3->GetYaxis()->SetTitle("Number of waveforms");
+	h3->Write();
+	delete h3;
 
 	/* Construct histogram of all pulses */	
 	for (int i = 0; i < num; i++)
@@ -270,6 +300,8 @@ int main(int argc, char* argv[])
 			delete h1;
 		}
 	}
+
+
 	file->Write();	
 	file->Close();
 	delete file;
