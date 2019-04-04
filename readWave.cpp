@@ -25,10 +25,11 @@ struct package
 	std::vector<double> ch1;
 	std::vector<double> ch2;
 	std::vector<double> ch3;
-	std::vector<double> max;
+	std::vector<double> max; // 0=ch1 1=ch2 ...
 	std::vector<double> min;
 	std::vector<double> numunique;
 	std::vector<double> ymulti;
+	std::vector<double> filteredmax = {0,0};
 	double maxdifference;
 };
 
@@ -191,7 +192,7 @@ int main(int argc, char* argv[])
 	}
 
 //	TApplication* rootapp = new TApplication("PMT timing", &argc, argv);
-	TFile *file  = new TFile("PMT_muon_PEN.root", "RECREATE");
+	TFile *file  = new TFile("data/PMT_muon_PEN.root", "RECREATE");
 	TDirectory *ch1 = file->mkdir("ch1");
 	TDirectory *ch2 = file->mkdir("ch2");
 	TDirectory *ch3 = file->mkdir("ch3");
@@ -218,6 +219,27 @@ int main(int argc, char* argv[])
 		if(data[i].min[1] <  minch2)
 			minch2 = data[i].min[1];
 		data[i].maxdifference = abs(data[i].max[0] - data[i].max[1]);
+
+		/* sliding mean */
+		std::deque<double> window(11,0.0);
+		for(int k = 0; k < 2; k++)
+		{
+			double tempmax{};
+			for(int j = 0; j < data[i].time.size(); j++)
+			{
+				if(k == 0)
+					window.push_back(data[i].ch1[j]);
+				else if(k == 1)
+					window.push_back(data[i].ch2[j]);
+				window.pop_front();
+				double temp = std::accumulate(window.begin(), window.end(), 0.0)/window.size();
+				if(temp > tempmax)
+					tempmax = temp;
+			}
+
+			data[i].filteredmax[k] = tempmax; 
+		}
+
 	}
 
 	std::cout << "Number of unique heights in ch1: " << uniquech1 << " ch2: " << uniquech2 << std::endl;
@@ -239,10 +261,10 @@ int main(int argc, char* argv[])
 	stats->cd();
 	std::string histname = "PH2";
 	std::string info = "Pulse Height for PMT-1B";
-	TH1D *h1 = new TH1D(histname.c_str(), info.c_str(), 625, 0, 500.8);
+	TH1D *h1 = new TH1D(histname.c_str(), info.c_str(), 1000, -1, 400);
 	for(int i = 0; i < num ; i++)
 	{
-		h1->Fill(data[i].max[1]);
+		h1->Fill(data[i].filteredmax[1]);
 	}
 	h1->GetXaxis()->SetTitle("Maximum Waveform Height (mV)");
 	h1->GetYaxis()->SetTitle("Number of waveforms");
@@ -251,10 +273,10 @@ int main(int argc, char* argv[])
 	
 	histname = "PH1";
 	info = "Pulse Height for PMT-1A";
-	TH1D *h2 = new TH1D(histname.c_str(), info.c_str(), 625, -0.4, 500.4);
+	TH1D *h2 = new TH1D(histname.c_str(), info.c_str(), 1000, -1, 400);
 	for(int i = 0; i < num ; i++)
 	{
-		h2->Fill(data[i].max[0]);
+		h2->Fill(data[i].filteredmax[0]);
 	}
 	h2->GetXaxis()->SetTitle("Maximum Waveform Height (mV)");
 	h2->GetYaxis()->SetTitle("Number of waveforms");
