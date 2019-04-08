@@ -61,7 +61,7 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
-	const int num = 5000;
+	const int num = 2000;
 	std::string filebase=argv[1];
         filebase += "/waveform"; 
 	std::vector<package> data; 
@@ -192,12 +192,18 @@ int main(int argc, char* argv[])
 	}
 
 //	TApplication* rootapp = new TApplication("PMT timing", &argc, argv);
-	TFile *file  = new TFile("data/PMT_muon_PEN.root", "RECREATE");
+	
+	std::string filename = argv[1];
+	filename.erase(0,3);
+	filename = "data/" + filename + ".root";
+
+	TFile *file  = new TFile(filename.c_str(), "RECREATE");
 	TDirectory *ch1 = file->mkdir("ch1");
 	TDirectory *ch2 = file->mkdir("ch2");
 	TDirectory *ch3 = file->mkdir("ch3");
 	TDirectory *directories[] = {ch1, ch2, ch3};
 	TDirectory *stats = file->mkdir("stats");
+	TDirectory *ch1graphs = file->mkdir("ch1 graphs");
 
 	double uniquech1(0), uniquech2(0), maxch1(0), maxch2(0), smallestmaxch1(180), smallestmaxch2(180), minch1(180), minch2(180);
 	for(int i = 0; i < num; i++)
@@ -234,10 +240,14 @@ int main(int argc, char* argv[])
 				window.pop_front();
 				double temp = std::accumulate(window.begin(), window.end(), 0.0)/window.size();
 				if(temp > tempmax)
+				{
 					tempmax = temp;
+				}
 			}
 
 			data[i].filteredmax[k] = tempmax; 
+			if(tempmax < 160)
+				std::cout << "Maximum of " << tempmax << " at " << i << std::endl;
 		}
 
 	}
@@ -246,14 +256,14 @@ int main(int argc, char* argv[])
 	std::cout << "Max height in ch1: " << maxch1 << " ch2: " << maxch2 << std::endl;
 	std::cout << "smallestmax height in ch1: " << smallestmaxch1 << " ch2: " << smallestmaxch2 << std::endl;
 	
-	/* compute number of bins */
+	/* compute size of bins */
 	
 	if(oldheader == false)
 	{
 	double numbinsch1 = 1000*data[0].ymulti[0];
 	double numbinsch2 = 1000*data[0].ymulti[1];
-	std::cout << "Number of bins ch1: " << numbinsch1 << std::endl;
-	std::cout << "Number of bins ch2: " << numbinsch2 << std::endl;
+	std::cout << "Size of bins ch1: " << numbinsch1 << std::endl;
+	std::cout << "Size of bins ch2: " << numbinsch2 << std::endl;
 	}
 
 	/* construct histogram of pulse heights */
@@ -297,31 +307,73 @@ int main(int argc, char* argv[])
 	h3->Write();
 	delete h3;
 
-	/* Construct histogram of all pulses */	
-	for (int i = 0; i < num; i++)
-	{
-		for( int j = 0; j < 2; j++) //per channel
-		{
-			directories[j]->cd();
-			std::string histname = "h" + std::to_string(i+1);
-			//std::cout << histname << std::endl;
-			std::string info = "a Pulse";
-			TH2D *h1 = new TH2D(histname.c_str(), info.c_str(), data[i].time.size(), data[i].time.front(), data[i].time.back(), 255, data[i].min[j],data[i].max[j]); 
-			if (j == 0)
-			{
-				for(int k = 0; k < data[i].time.size(); k++)
-					h1->Fill(data[i].time[k], data[i].ch1[k]);
-			}
-			else	
-			{
-				for(int k = 0; k < data[i].time.size(); k++)
-					h1->Fill(data[i].time[k], data[i].ch2[k]);
-			}
+	/* Graph 2d amplitudes of PMT's */
+	std::vector<double> max1;
+	std::vector<double> max2;
 
-			h1->Write();
-			delete h1;
-		}
+	for(int i = 0; i < data.size(); i++)
+	{
+		max1.push_back(data[i].filteredmax[0]);
+		max2.push_back(data[i].filteredmax[1]);
 	}
+	
+	TCanvas *c1 = new TCanvas("XY Plot", "PMT maximums XY plot");
+	TGraph * g1 = new TGraph(data.size(),&max1[0],&max2[0]);
+	g1->GetXaxis()->SetTitle("PMT-1A maximum (mV)");
+	g1->GetYaxis()->SetTitle("PMT-1B maximum (mV)");
+	g1->SetDrawOption("AP");
+	g1->Draw("AP");
+	c1->Write();
+	
+	ch1graphs->cd();
+
+	for(int i = 0; i < num; i++)
+	{
+		std::vector<double> x;
+		std::vector<double> y;
+		for(int j = 0; j < data[i].time.size(); j++)
+		{	
+			y.push_back(data[i].ch1[j]);
+			x.push_back(data[i].time[j]);
+		}
+		//TCanvas *c2 = new TCanvas("XY waveform", "PMT-1A waveform XY plot");
+		TGraph * g2 = new TGraph(data[0].time.size(),&x[0],&y[0]);
+		g2->GetXaxis()->SetTitle("Time (ns)");
+		g2->GetYaxis()->SetTitle("Amplitude (mV)");
+		g2->SetName(Form("g%d",i) );
+		g2->SetDrawOption("AP");
+		g2->Draw("AP");
+		g2->Write();
+		delete g2;
+	}
+	
+	//g1->Write();
+
+	/* Construct histogram of all pulses */	
+//	for (int i = 0; i < num; i++)
+//	{
+//		for( int j = 0; j < 2; j++) //per channel
+//		{
+//			directories[j]->cd();
+//			std::string histname = "h" + std::to_string(i+1);
+//			//std::cout << histname << std::endl;
+//			std::string info = "a Pulse";
+//			TH2D *h1 = new TH2D(histname.c_str(), info.c_str(), data[i].time.size(), data[i].time.front(), data[i].time.back(), 255, data[i].min[j],data[i].max[j]); 
+//			if (j == 0)
+//			{
+//				for(int k = 0; k < data[i].time.size(); k++)
+//					h1->Fill(data[i].time[k], data[i].ch1[k]);
+//			}
+//			else	
+//			{
+//				for(int k = 0; k < data[i].time.size(); k++)
+//					h1->Fill(data[i].time[k], data[i].ch2[k]);
+//			}
+//
+//			h1->Write();
+//			delete h1;
+//		}
+//	}
 
 
 	file->Write();	
