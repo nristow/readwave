@@ -18,6 +18,7 @@
 #include <root/TF1.h>
 #include <root/TFile.h>
 #include <root/TSpline.h>
+#include "countfiles.h"
 
 struct package
 {
@@ -61,9 +62,16 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
-	const int num = 2000;
 	std::string filebase=argv[1];
-        filebase += "/waveform"; 
+	const int num = numFiles(filebase);
+	if (num == -1)
+	{
+		std::cout << "Directory doesn't exist" << std::endl;
+		return -1;
+	}
+
+	std::cout << "Parsing " << num << " files" << std::endl;	
+	filebase += "/waveform"; 
 	std::vector<package> data; 
 
 	int posa(0),posb(0),posc(0);
@@ -114,7 +122,7 @@ int main(int argc, char* argv[])
 				std::string line;
 				std::getline(file,line);
 			}
-		}
+	}
 		const double scale = 1000; // scale to mV level
 		double mina(100),minb(100),minc(100), maxa(-100), maxb(-100), maxc(-100);
 		double pmaxa(0),pmaxb(0),pmaxc(0);
@@ -204,6 +212,7 @@ int main(int argc, char* argv[])
 	TDirectory *directories[] = {ch1, ch2, ch3};
 	TDirectory *stats = file->mkdir("stats");
 	TDirectory *ch1graphs = file->mkdir("ch1 graphs");
+	TDirectory *timing = file->mkdir("Timing");
 
 	double uniquech1(0), uniquech2(0), maxch1(0), maxch2(0), smallestmaxch1(180), smallestmaxch2(180), minch1(180), minch2(180);
 	for(int i = 0; i < num; i++)
