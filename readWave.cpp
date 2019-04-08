@@ -31,6 +31,9 @@ struct package
 	std::vector<double> numunique;
 	std::vector<double> ymulti;
 	std::vector<double> filteredmax = {0,0};
+	std::vector<double> threshold = {0,0}; //y value of waveform at threshold
+	std::vector<double> thresholdtime = {0,0}; // time that waveform crosses threshold
+	double timingdifference;
 	double maxdifference;
 };
 
@@ -211,7 +214,7 @@ int main(int argc, char* argv[])
 	TDirectory *ch3 = file->mkdir("ch3");
 	TDirectory *directories[] = {ch1, ch2, ch3};
 	TDirectory *stats = file->mkdir("stats");
-	TDirectory *ch1graphs = file->mkdir("ch1 graphs");
+	TDirectory *ch1graphs = file->mkdir("Pulse graphs");
 	TDirectory *timing = file->mkdir("Timing");
 
 	double uniquech1(0), uniquech2(0), maxch1(0), maxch2(0), smallestmaxch1(180), smallestmaxch2(180), minch1(180), minch2(180);
@@ -236,10 +239,10 @@ int main(int argc, char* argv[])
 		data[i].maxdifference = abs(data[i].max[0] - data[i].max[1]);
 
 		/* sliding mean */
-		std::deque<double> window(11,0.0);
 		for(int k = 0; k < 2; k++)
 		{
 			double tempmax{};
+			std::deque<double> window(11,0.0);
 			for(int j = 0; j < data[i].time.size(); j++)
 			{
 				if(k == 0)
@@ -255,11 +258,11 @@ int main(int argc, char* argv[])
 			}
 
 			data[i].filteredmax[k] = tempmax; 
-			if(tempmax < 160)
-				std::cout << "Maximum of " << tempmax << " at " << i << std::endl;
-		}
 
+
+		}
 	}
+	
 
 	std::cout << "Number of unique heights in ch1: " << uniquech1 << " ch2: " << uniquech2 << std::endl;
 	std::cout << "Max height in ch1: " << maxch1 << " ch2: " << maxch2 << std::endl;
@@ -355,6 +358,23 @@ int main(int argc, char* argv[])
 		g2->Write();
 		delete g2;
 	}
+
+	/* Histogram of threshold timing difference */
+	timing->cd();
+	std::string histname3 = "Timing Difference";
+	std::string info3 = "Timing difference of PMT's at 50% maximum amplitude";
+	TH1D *h4 = new TH1D(histname3.c_str(), info3.c_str(), 1000, -5, 35);
+	for(int i = 0; i < num ; i++)
+	{
+		h4->Fill(data[i].maxdifference);
+	}
+	h4->GetXaxis()->SetTitle("Timing difference PMT1B-PMT1A (ns)");
+	h4->GetYaxis()->SetTitle("Number of waveforms");
+	h4->Write();
+	delete h4;
+
+
+
 	
 	//g1->Write();
 
