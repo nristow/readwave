@@ -7,18 +7,19 @@
 #include <algorithm>
 #include <numeric>
 #include <cmath>
-#include <root/TGraph.h>
-#include <root/TApplication.h>
-#include <root/TH2D.h>
-#include <root/TH1D.h>
-#include <root/TProfile.h>
-#include <root/TProfile2D.h>
-#include <root/TCanvas.h>
-#include <root/THStack.h>
-#include <root/TF1.h>
-#include <root/TFile.h>
-#include <root/TSpline.h>
+#include <TGraph.h>
+#include <TApplication.h>
+#include <TH2D.h>
+#include <TH1D.h>
+#include <TProfile.h>
+#include <TProfile2D.h>
+#include <TCanvas.h>
+#include <THStack.h>
+#include <TF1.h>
+#include <TFile.h>
+#include <TSpline.h>
 #include "countfiles.h"
+#include "fermidirac.h"
 
 struct package
 {
@@ -216,6 +217,7 @@ int main(int argc, char* argv[])
 	TDirectory *stats = file->mkdir("stats");
 	TDirectory *ch1graphs = file->mkdir("Pulse graphs");
 	TDirectory *timing = file->mkdir("Timing");
+	TDirectory *fits = file->mkdir("Fits");
 
 	double uniquech1(0), uniquech2(0), maxch1(0), maxch2(0), smallestmaxch1(180), smallestmaxch2(180), minch1(180), minch2(180);
 	for(int i = 0; i < num; i++)
@@ -258,7 +260,23 @@ int main(int argc, char* argv[])
 			}
 
 			data[i].filteredmax[k] = tempmax; 
+			double threshold = 0.5; // threshold can either be absolute or percentage of absolute magnitude
+			
+			/* determine amplitude of threshold based on maximum
+			 * amplitude */
+			
+			data[i].threshold[k] = threshold * tempmax;
+			/* find first location of threshold in time */
 
+			for(int j = 0; j < data[i].time.size()-1; j++)
+			{
+				if(data[i].ch1[j] < data[i].threshold[k] && data[i].threshold[k] < data[i].ch1[j+1])
+				{
+					data[i].thresholdtime[k] = data[i].time[j];
+				}
+			}
+			//std::cout << i << " " <<  data[i].threshold[0]<< " " << data[i].threshold[1]<< " " << data[i].thresholdtime[k]<< std::endl;
+			data[i].maxdifference = data[i].thresholdtime[1] - data[i].thresholdtime[0];
 
 		}
 	}
@@ -338,6 +356,13 @@ int main(int argc, char* argv[])
 	c1->Write();
 	
 	ch1graphs->cd();
+	
+	//fits->cd();
+	//TF1 *fit = new TF1("fermi dirac", fermi_dirac, 0,9,3);
+	//fit->SetParNames("Alpha","t0","A");
+	//fit->SetParameters(1.0,8,108);
+	//fit->Draw();
+	//fit->Write();
 
 	for(int i = 0; i < num; i++)
 	{
@@ -346,10 +371,11 @@ int main(int argc, char* argv[])
 		for(int j = 0; j < data[i].time.size(); j++)
 		{	
 			y.push_back(data[i].ch1[j]);
-			x.push_back(data[i].time[j]);
+			x.push_back(data[i].time[j]*100000000);
 		}
 		//TCanvas *c2 = new TCanvas("XY waveform", "PMT-1A waveform XY plot");
 		TGraph * g2 = new TGraph(data[0].time.size(),&x[0],&y[0]);
+	//	fit->SetParameters(0.1, data[i].thresholdtime[0], data[i].filteredmax[0]);
 		g2->GetXaxis()->SetTitle("Time (ns)");
 		g2->GetYaxis()->SetTitle("Amplitude (mV)");
 		g2->SetName(Form("g%d",i) );
@@ -360,13 +386,14 @@ int main(int argc, char* argv[])
 	}
 
 	/* Histogram of threshold timing difference */
+	
 	timing->cd();
 	std::string histname3 = "Timing Difference";
 	std::string info3 = "Timing difference of PMT's at 50% maximum amplitude";
-	TH1D *h4 = new TH1D(histname3.c_str(), info3.c_str(), 1000, -5, 35);
+	TH1D *h4 = new TH1D(histname3.c_str(), info3.c_str(), 100, -20, 20);
 	for(int i = 0; i < num ; i++)
 	{
-		h4->Fill(data[i].maxdifference);
+		h4->Fill(data[i].maxdifference*1000000000);
 	}
 	h4->GetXaxis()->SetTitle("Timing difference PMT1B-PMT1A (ns)");
 	h4->GetYaxis()->SetTitle("Number of waveforms");
