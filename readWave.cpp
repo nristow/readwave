@@ -28,14 +28,23 @@ struct package
 	std::vector<double> ch2;
 	std::vector<double> ch3;
 	std::vector<double> max; // 0=ch1 1=ch2 ...
+        std::vector<double> maxtime;
 	std::vector<double> min;
 	std::vector<double> numunique;
 	std::vector<double> ymulti;
+        std::vector<double> thresholdtime = {0,0};
 	std::vector<double> filteredmax = {0,0};
-	std::vector<double> threshold = {0,0}; //y value of waveform at threshold
-	std::vector<double> thresholdtime = {0,0}; // time that waveform crosses threshold
-	double timingdifference;
-	double maxdifference;
+	std::vector<double> meanthreshold = {0,0};
+	std::vector<double> meanthresholdtime = {0,0};
+        std::vector<double> fitmaximum = {0,0};
+        std::vector<double> timefitmaximum = {0,0};
+        std::vector<double> fitthreshold = {0,0};
+        std::vector<double> timefitthreshold = {0,0};
+
+	//double fittimingdifference(0);
+	//double maxdifference(0);
+        double threshold = 0.5;
+        double difference;
 };
 
 
@@ -67,12 +76,15 @@ int main(int argc, char* argv[])
 	}
 
 	std::string filebase=argv[1];
-	const int num = numFiles(filebase);
+	int num = numFiles(filebase);
+        int numcutoff(0);
 	if (num == -1)
 	{
 		std::cout << "Directory doesn't exist" << std::endl;
 		return -1;
 	}
+
+        const double cutoff = 80; //maximum height of waveforms considered [mV]
 
 	std::cout << "Parsing " << num << " files" << std::endl;	
 	filebase += "/waveform"; 
@@ -126,15 +138,20 @@ int main(int argc, char* argv[])
 				std::string line;
 				std::getline(file,line);
 			}
-	}
+                }
 		const double scale = 1000; // scale to mV level
-		double mina(100),minb(100),minc(100), maxa(-100), maxb(-100), maxc(-100);
+		double mina(100),minb(100),minc(100), maxa(-100), maxb(-100), maxc(-100), tmaxa(0),tmaxb(0);
 		double pmaxa(0),pmaxb(0),pmaxc(0);
 		double uniquea(0), uniqueb(0), uniquec(0);
 		for (std::string line; std::getline(file, line); )
 		{
 			std::stringstream ss(line);
 			double d(0), a(0), b(0), c(0);
+                        //maxa = 1000;
+                        //maxb = 1000;
+                        //mina = -1000;
+                        //minb = -1000;
+
 			ss >> d >> std::ws >> a >> std::ws >> b;
 			/* all 3 channels are inverted */
 			a = -a * scale;
@@ -155,6 +172,7 @@ int main(int argc, char* argv[])
 			{
 				maxa = a;
 				pmaxa = temp.ch1.size();
+                                tmaxa = d;
 			}
 			if(b < minb)
 			{
@@ -165,6 +183,7 @@ int main(int argc, char* argv[])
 			{
 				maxb = b;
 				pmaxb = temp.ch2.size();
+                                tmaxb = d;
 			}
 			//if(c < minc)
 			//{
@@ -190,21 +209,33 @@ int main(int argc, char* argv[])
 	//	if (n > uniquec)
 	//		uniquec = n;
 
-		temp.max.push_back(maxa);
-		temp.max.push_back(maxb);
-		//temp.max.push_back(maxc);
-		temp.min.push_back(mina);
-		temp.min.push_back(minb);
-		//temp.min.push_back(minc);
-		temp.numunique.push_back(uniquea);
-		temp.numunique.push_back(uniqueb);
-		//temp.numunique.push_back(uniquec);
-		data.push_back(temp);
-		file.close();
-	}
+                //std::cout << maxa << " " << maxb << std::endl;
+                if((maxa <= cutoff) && (maxb <= cutoff))
+                {
+                        scaleTime(temp.time);
+                        temp.max.push_back(maxa);
+                        temp.max.push_back(maxb);
+                        temp.maxtime.push_back(tmaxa);
+                        temp.maxtime.push_back(tmaxb);
+                        //temp.max.push_back(maxc);
+                        temp.min.push_back(mina);
+                        temp.min.push_back(minb);
+                        //temp.min.push_back(minc);
+                        temp.numunique.push_back(uniquea);
+                        temp.numunique.push_back(uniqueb);
+                        //temp.numunique.push_back(uniquec);
+                        data.push_back(temp);
+                        numcutoff++;
+                }
 
-//	TApplication* rootapp = new TApplication("PMT timing", &argc, argv);
-	
+                file.close();
+                
+	}
+        std::cout << numcutoff << " files under cutoff threshold\n";
+        
+        
+        num = numcutoff; // total number of waveforms under threshold, set above
+        
 	std::string filename = argv[1];
 	filename.erase(0,3);
 	filename = "data/" + filename + ".root";
@@ -215,11 +246,12 @@ int main(int argc, char* argv[])
 	TDirectory *ch3 = file->mkdir("ch3");
 	TDirectory *directories[] = {ch1, ch2, ch3};
 	TDirectory *stats = file->mkdir("stats");
-	TDirectory *ch1graphs = file->mkdir("Pulse graphs");
+	TDirectory *ch1graphs = file->mkdir("Ch1 pulse graphs");
+	TDirectory *ch2graphs = file->mkdir("Ch2 pulse graphs");
 	TDirectory *timing = file->mkdir("Timing");
 	TDirectory *fits = file->mkdir("Fits");
 
-	double uniquech1(0), uniquech2(0), maxch1(0), maxch2(0), smallestmaxch1(180), smallestmaxch2(180), minch1(180), minch2(180);
+	double uniquech1(0), uniquech2(0), maxch1(0), maxch2(0), smallestmaxch1(180), smallestmaxch2(180), minch1(180), minch2(180), maxtimech1(0), maxtimech2(0);
 	for(int i = 0; i < num; i++)
 	{
 		if (data[i].numunique[0] > uniquech1)
@@ -238,13 +270,13 @@ int main(int argc, char* argv[])
 			minch1 = data[i].min[0];
 		if(data[i].min[1] <  minch2)
 			minch2 = data[i].min[1];
-		data[i].maxdifference = abs(data[i].max[0] - data[i].max[1]);
+		//data[i].maxdifference = abs(data[i].max[0] - data[i].max[1]);
 
 		/* sliding mean */
 		for(int k = 0; k < 2; k++)
 		{
 			double tempmax{};
-			std::deque<double> window(11,0.0);
+			std::deque<double> window(3,0.0);
 			for(int j = 0; j < data[i].time.size(); j++)
 			{
 				if(k == 0)
@@ -258,29 +290,30 @@ int main(int argc, char* argv[])
 					tempmax = temp;
 				}
 			}
+                        data[i].filteredmax[k] = tempmax; 
+                                                
+                        /* determine amplitude of threshold as a scale of maximum
+                         ** amplitude */
+                        
+                        data[i].meanthreshold[k] = data[i].threshold * tempmax;
+                        
+                        /* find first location of threshold in time */
 
-			data[i].filteredmax[k] = tempmax; 
-			double threshold = 0.5; // threshold can either be absolute or percentage of absolute magnitude
-			
-			/* determine amplitude of threshold based on maximum
-			 * amplitude */
-			
-			data[i].threshold[k] = threshold * tempmax;
-			/* find first location of threshold in time */
+                        for(int j = 0; j < data[i].time.size()-1; j++)
+                        {
+                                if(data[i].ch1[j] < data[i].meanthreshold[k] && data[i].meanthreshold[k] < data[i].ch1[j+1])
+                                {
+                                        data[i].meanthresholdtime[k] = data[i].time[j];
+                                }
+                        }
+                        //std::cout << i << " " <<  data[i].threshold[0]<< " " << data[i].threshold[1]<< " " << data[i].thresholdtime[k]<< std::endl;
+                        //                      data[i].maxdifference = data[i].thresholdtime[1] - data[i].thresholdtime[0];
 
-			for(int j = 0; j < data[i].time.size()-1; j++)
-			{
-				if(data[i].ch1[j] < data[i].threshold[k] && data[i].threshold[k] < data[i].ch1[j+1])
-				{
-					data[i].thresholdtime[k] = data[i].time[j];
-				}
-			}
-			//std::cout << i << " " <<  data[i].threshold[0]<< " " << data[i].threshold[1]<< " " << data[i].thresholdtime[k]<< std::endl;
-			data[i].maxdifference = data[i].thresholdtime[1] - data[i].thresholdtime[0];
 
-		}
-	}
-	
+
+}
+}
+
 
 	std::cout << "Number of unique heights in ch1: " << uniquech1 << " ch2: " << uniquech2 << std::endl;
 	std::cout << "Max height in ch1: " << maxch1 << " ch2: " << maxch2 << std::endl;
@@ -296,7 +329,62 @@ int main(int argc, char* argv[])
 	std::cout << "Size of bins ch2: " << numbinsch2 << std::endl;
 	}
 
-	/* construct histogram of pulse heights */
+        /* Plot graphs of waveforms below cutoff and fit them */
+        /* Find the fit maximum and threshold positions in time */
+
+        const double ttimeoffset = 0.5E-9; //s
+        
+        TF1 *f1 = new TF1("fermi_dirac_poly", fermi_dirac_parabola, -15,0,5);
+	f1->SetParNames("Alpha","t0","A", "c1", "c2");
+        
+	for(int p = 0; p < 2; p++)
+        {        
+
+                ch1graphs->cd();
+                if(p ==1 )
+                        ch2graphs->cd();
+
+                for(int i = 0; i < 10; i++)
+                {
+                        std::vector<double> x;
+                        std::vector<double> y;
+                        for(int j = 0; j < data[i].time.size(); j++)
+                        {	
+                                if(p == 0)
+                                {
+                                        y.push_back(data[i].ch1[j]);
+                                        x.push_back(data[i].time[j]*100000000);
+                                }
+                                else
+                                {
+                                        y.push_back(data[i].ch2[j]);
+                                        x.push_back(data[i].time[j]*100000000);
+                                }
+                        }
+                        std::string name = "Fit Waveform" + std::to_string(i) + " PMT " + std::to_string(p+1);
+                        TCanvas *c2 = new TCanvas(name.c_str(), "Waveform fitting");
+                        TGraph * g2 = new TGraph(data[i].time.size(),&x[0],&y[0]);
+                        f1->SetParameters(1, data[i].meanthresholdtime[p], data[i].filteredmax[p],0,0,0);
+                        //f1->SetRange(-15,data[i].maxtime[p]+ttimeoffset);
+                        std::cout << data[i].meanthresholdtime[p]+ttimeoffset << " " << data[i].filteredmax[p] << std::endl;
+                        g2->Fit(f1, "Q", "", -15, (data[i].maxtime[p])+ttimeoffset);	
+                        g2->GetXaxis()->SetTitle("Time (ns)");
+                        std::string title = "Waveform " + std::to_string(i) + " fitting";
+                        g2->SetTitle(title.c_str());
+                        g2->GetYaxis()->SetTitle("Amplitude (mV)");
+                        g2->SetName(Form("g%d",i) );
+                        g2->Draw("AP");
+                        f1->Draw("SAME");
+                        c2->Write();
+                        data[i].fitmaximum[p] = f1->GetMaximum(-15,data[i].maxtime[p]+ttimeoffset);
+                        data[i].timefitmaximum[p] = f1->GetMaximumX(-15, data[i].maxtime[p]+ttimeoffset);
+
+                        data[i].difference = data[i].timefitmaximum[1]-data[i].timefitmaximum[0];
+                        //std::cout << data[i].difference << std::endl;
+                        delete g2,c2;
+                }
+        }
+        /* construct histogram of pulse heights */
 	
 	stats->cd();
 	std::string histname = "PH2";
@@ -322,22 +410,8 @@ int main(int argc, char* argv[])
 	h2->GetYaxis()->SetTitle("Number of waveforms");
 	h2->Write();
 	delete h2;
-	
-	/* Plot difference in height between all pulses */
 
-	std::string histname2 = "Difference";
-	std::string info2 = "Absolute difference in pulse height";
-	TH1D *h3 = new TH1D(histname2.c_str(), info2.c_str(), 254, 0, 204.4);
-	for(int i = 0; i < num ; i++)
-	{
-		h3->Fill(data[i].maxdifference);
-	}
-	h3->GetXaxis()->SetTitle("Absolute difference (mV)");
-	h3->GetYaxis()->SetTitle("Number of waveforms");
-	h3->Write();
-	delete h3;
-
-	/* Graph 2d amplitudes of PMT's */
+	/* Scatterplot of amplitudes of PMT's */
 	std::vector<double> max1;
 	std::vector<double> max2;
 
@@ -355,45 +429,16 @@ int main(int argc, char* argv[])
 	g1->Draw("AP");
 	c1->Write();
 	
-	ch1graphs->cd();
-	
-	//fits->cd();
-	//TF1 *fit = new TF1("fermi dirac", fermi_dirac, 0,9,3);
-	//fit->SetParNames("Alpha","t0","A");
-	//fit->SetParameters(1.0,8,108);
-	//fit->Draw();
-	//fit->Write();
-
-	for(int i = 0; i < num; i++)
-	{
-		std::vector<double> x;
-		std::vector<double> y;
-		for(int j = 0; j < data[i].time.size(); j++)
-		{	
-			y.push_back(data[i].ch1[j]);
-			x.push_back(data[i].time[j]*100000000);
-		}
-		//TCanvas *c2 = new TCanvas("XY waveform", "PMT-1A waveform XY plot");
-		TGraph * g2 = new TGraph(data[0].time.size(),&x[0],&y[0]);
-	//	fit->SetParameters(0.1, data[i].thresholdtime[0], data[i].filteredmax[0]);
-		g2->GetXaxis()->SetTitle("Time (ns)");
-		g2->GetYaxis()->SetTitle("Amplitude (mV)");
-		g2->SetName(Form("g%d",i) );
-		g2->SetDrawOption("AP");
-		g2->Draw("AP");
-		g2->Write();
-		delete g2;
-	}
 
 	/* Histogram of threshold timing difference */
 	
 	timing->cd();
 	std::string histname3 = "Timing Difference";
 	std::string info3 = "Timing difference of PMT's at 50% maximum amplitude";
-	TH1D *h4 = new TH1D(histname3.c_str(), info3.c_str(), 100, -20, 20);
-	for(int i = 0; i < num ; i++)
+	TH1D *h4 = new TH1D(histname3.c_str(), info3.c_str(), 10000, -10, 10);
+	for(int i = 0; i < 10 ; i++)
 	{
-		h4->Fill(data[i].maxdifference*1000000000);
+		h4->Fill(data[i].difference);
 	}
 	h4->GetXaxis()->SetTitle("Timing difference PMT1B-PMT1A (ns)");
 	h4->GetYaxis()->SetTitle("Number of waveforms");
