@@ -7,17 +7,17 @@
 #include <algorithm>
 #include <numeric>
 #include <cmath>
-#include <TGraph.h>
-#include <TApplication.h>
-#include <TH2D.h>
-#include <TH1D.h>
-#include <TProfile.h>
-#include <TProfile2D.h>
-#include <TCanvas.h>
-#include <THStack.h>
-#include <TF1.h>
-#include <TFile.h>
-#include <TSpline.h>
+#include <root/TGraph.h>
+#include <root/TApplication.h>
+#include <root/TH2D.h>
+#include <root/TH1D.h>
+#include <root/TProfile.h>
+#include <root/TProfile2D.h>
+#include <root/TCanvas.h>
+#include <root/THStack.h>
+#include <root/TF1.h>
+#include <root/TFile.h>
+#include <root/TSpline.h>
 #include "countfiles.h"
 #include "fermidirac.h"
 
@@ -43,7 +43,7 @@ struct package
 
 	//double fittimingdifference(0);
 	//double maxdifference(0);
-        double threshold = 0.5;
+        double threshold = 15;
         double difference;
 };
 
@@ -78,6 +78,7 @@ int main(int argc, char* argv[])
 	std::string filebase=argv[1];
 	int num = numFiles(filebase);
         int numcutoff(0);
+	const int numtocheck = 10;
 	if (num == -1)
 	{
 		std::cout << "Directory doesn't exist" << std::endl;
@@ -140,6 +141,7 @@ int main(int argc, char* argv[])
 			}
                 }
 		const double scale = 1000; // scale to mV level
+                const double timescale = 1E9;
 		double mina(100),minb(100),minc(100), maxa(-100), maxb(-100), maxc(-100), tmaxa(0),tmaxb(0);
 		double pmaxa(0),pmaxb(0),pmaxc(0);
 		double uniquea(0), uniqueb(0), uniquec(0);
@@ -157,7 +159,7 @@ int main(int argc, char* argv[])
 			a = -a * scale;
 			b = -b * scale;
 			//c = -c * scale;
-			
+			d *= timescale;	
 			temp.time.push_back(d);
 			temp.ch1.push_back(a);
 			temp.ch2.push_back(b);
@@ -212,7 +214,7 @@ int main(int argc, char* argv[])
                 //std::cout << maxa << " " << maxb << std::endl;
                 if((maxa <= cutoff) && (maxb <= cutoff))
                 {
-                        scaleTime(temp.time);
+                        //scaleTime(temp.time);
                         temp.max.push_back(maxa);
                         temp.max.push_back(maxb);
                         temp.maxtime.push_back(tmaxa);
@@ -332,10 +334,7 @@ int main(int argc, char* argv[])
         /* Plot graphs of waveforms below cutoff and fit them */
         /* Find the fit maximum and threshold positions in time */
 
-        const double ttimeoffset = 0.5E-9; //s
-        
-        TF1 *f1 = new TF1("fermi_dirac_poly", fermi_dirac_parabola, -15,0,5);
-	f1->SetParNames("Alpha","t0","A", "c1", "c2");
+        const double ttimeoffset = 0.5; //ns
         
 	for(int p = 0; p < 2; p++)
         {        
@@ -344,7 +343,7 @@ int main(int argc, char* argv[])
                 if(p ==1 )
                         ch2graphs->cd();
 
-                for(int i = 0; i < 10; i++)
+                for(int i = 0; i < num; i++)
                 {
                         std::vector<double> x;
                         std::vector<double> y;
@@ -353,21 +352,24 @@ int main(int argc, char* argv[])
                                 if(p == 0)
                                 {
                                         y.push_back(data[i].ch1[j]);
-                                        x.push_back(data[i].time[j]*100000000);
+                                        x.push_back(data[i].time[j]);
                                 }
                                 else
                                 {
                                         y.push_back(data[i].ch2[j]);
-                                        x.push_back(data[i].time[j]*100000000);
+                                        x.push_back(data[i].time[j]);
                                 }
                         }
                         std::string name = "Fit Waveform" + std::to_string(i) + " PMT " + std::to_string(p+1);
-                        TCanvas *c2 = new TCanvas(name.c_str(), "Waveform fitting");
+			TF1 *f1 = new TF1("fermi_dirac_poly", fermi_dirac_parabola, -100, data[i].maxtime[p]+ttimeoffset, 5);
+			f1->SetParNames("Alpha","t0","A", "c1", "c2");
+                        
+			TCanvas *c2 = new TCanvas(name.c_str(), "Waveform fitting");
                         TGraph * g2 = new TGraph(data[i].time.size(),&x[0],&y[0]);
                         f1->SetParameters(1, data[i].meanthresholdtime[p], data[i].filteredmax[p],0,0,0);
-                        //f1->SetRange(-15,data[i].maxtime[p]+ttimeoffset);
-                        std::cout << data[i].meanthresholdtime[p]+ttimeoffset << " " << data[i].filteredmax[p] << std::endl;
-                        g2->Fit(f1, "Q", "", -15, (data[i].maxtime[p])+ttimeoffset);	
+                        //f1->SetRange(-100,data[i].maxtime[p]+ttimeoffset);
+                        //std::cout << data[i].meanthresholdtime[p]+ttimeoffset << " " << data[i].filteredmax[p] << std::endl;
+                        g2->Fit(f1, "Q", "",-100,data[i].maxtime[p]+ttimeoffset);	
                         g2->GetXaxis()->SetTitle("Time (ns)");
                         std::string title = "Waveform " + std::to_string(i) + " fitting";
                         g2->SetTitle(title.c_str());
@@ -376,8 +378,13 @@ int main(int argc, char* argv[])
                         g2->Draw("AP");
                         f1->Draw("SAME");
                         c2->Write();
-                        data[i].fitmaximum[p] = f1->GetMaximum(-15,data[i].maxtime[p]+ttimeoffset);
-                        data[i].timefitmaximum[p] = f1->GetMaximumX(-15, data[i].maxtime[p]+ttimeoffset);
+
+                        /* compute maximum from fit and threshold crossing time */
+
+                        data[i].fitmaximum[p] = f1->GetMaximum(-100,data[i].maxtime[p]+ttimeoffset);
+                        data[i].timefitmaximum[p] = f1->GetMaximumX(-100, data[i].maxtime[p]+ttimeoffset);
+                        data[i].fitthreshold[p] = data[i].threshold;
+                        data[i].timefitthreshold[p] = f1->GetX(data[i].fitthreshold[p], -100, data[i].maxtime[p]);
 
                         data[i].difference = data[i].timefitmaximum[1]-data[i].timefitmaximum[0];
                         //std::cout << data[i].difference << std::endl;
@@ -435,8 +442,8 @@ int main(int argc, char* argv[])
 	timing->cd();
 	std::string histname3 = "Timing Difference";
 	std::string info3 = "Timing difference of PMT's at 50% maximum amplitude";
-	TH1D *h4 = new TH1D(histname3.c_str(), info3.c_str(), 10000, -10, 10);
-	for(int i = 0; i < 10 ; i++)
+	TH1D *h4 = new TH1D(histname3.c_str(), info3.c_str(), 100000, -100, 100);
+	for(int i = 0; i < num; i++)
 	{
 		h4->Fill(data[i].difference);
 	}
