@@ -40,11 +40,12 @@ struct package
         std::vector<double> timefitmaximum = {0,0};
         std::vector<double> fitthreshold = {0,0};
         std::vector<double> timefitthreshold = {0,0};
-
+	std::vector<double> thresholds = {13,20,40,60,79};
+	std::vector<double> differences={0,0,0,0,0};
 	//double fittimingdifference(0);
 	//double maxdifference(0);
         double threshold = 15;
-        double difference;
+        double difference = 0;
 };
 
 
@@ -388,7 +389,8 @@ int main(int argc, char* argv[])
 
                         data[i].difference = data[i].timefitmaximum[1]-data[i].timefitmaximum[0];
                         //std::cout << data[i].difference << std::endl;
-                        delete g2,c2;
+                        delete g2;
+			delete c2;
                 }
         }
         /* construct histogram of pulse heights */
