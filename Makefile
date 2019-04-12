@@ -4,7 +4,7 @@ INCROOT="/usr/include/root/ROOT"
 INCROOT2="/usr/include/root"
 
 default: 
-	g++ -g `root-config --libs --glibs ` -I/usr/include/root -I/usr/include/root/ROOT readWave.cpp countfiles.cpp fermidirac.cpp -o readWave
+	g++ -g -Wall `root-config --libs --glibs ` -I/usr/include/root -I/usr/include/root/ROOT readWave.cpp countfiles.cpp fermidirac.cpp -o readWave
 
 fast: 
 	g++ -Ofast -march=native `root-config --libs --glibs ` -I/usr/include/root -I/usr/include/root/ROOT readWave.cpp countfiles.cpp fermidirac.cpp -o readWave
