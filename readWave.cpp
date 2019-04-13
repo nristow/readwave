@@ -57,7 +57,7 @@ int findUnique(std::vector<double> v)
 
 void scaleTime(std::vector<double> &v)
 {
-	for (int i = 0; i < v.size(); i++)
+	for (unsigned int i = 0; i < v.size(); i++)
 	{
 		v[i] *= 1000000000;
 	}
@@ -77,9 +77,12 @@ int main(int argc, char* argv[])
 	}
 
 	std::string filebase=argv[1];
+	if(filebase.back() == '/')
+		filebase.pop_back();
+	
 	int num = numFiles(filebase);
-        int numcutoff(0);
-	const int numtocheck = 10;
+        int numcutoff(0);		//used to set num to how many files have passed threshold
+	const int numtocheck = 10;	//debugging small batch
 	if (num == -1)
 	{
 		std::cout << "Directory doesn't exist" << std::endl;
@@ -253,6 +256,9 @@ int main(int argc, char* argv[])
 	TDirectory *ch2graphs = file->mkdir("Ch2 pulse graphs");
 	TDirectory *timing = file->mkdir("Timing");
 	TDirectory *fits = file->mkdir("Fits");
+
+
+	/* Find maximum and minimums among all of the waveforms */
 
 	double uniquech1(0), uniquech2(0), maxch1(0), maxch2(0), smallestmaxch1(180), smallestmaxch2(180), minch1(180), minch2(180), maxtimech1(0), maxtimech2(0);
 	for(int i = 0; i < num; i++)
@@ -442,20 +448,20 @@ int main(int argc, char* argv[])
 	/* Histogram of threshold timing difference */
 	
 	timing->cd();
-	std::string histname3 = "Timing Difference";
-	std::string info3 = "Timing difference of PMT's at 50% maximum amplitude";
-	TH1D *h4 = new TH1D(histname3.c_str(), info3.c_str(), 100000, -100, 100);
-	for(int i = 0; i < num; i++)
+	for(int j =0; j < data[0].thresholds.size(); j++)
 	{
-		h4->Fill(data[i].difference);
+		std::string histname3 = "Timing Difference " + std::to_string(data[0].thresholds[j]);
+		std::string info3 = "Timing difference of PMT's at" + std::to_string(data[0].thresholds[j]) + "mV";
+		TH1D *h4 = new TH1D(histname3.c_str(), info3.c_str(), 100000, -100, 100);
+		for(int i = 0; i < num; i++)
+		{
+			h4->Fill(data[i].differences[j]);
+		}
+		h4->GetXaxis()->SetTitle("Timing difference PMT1B-PMT1A (ns)");
+		h4->GetYaxis()->SetTitle("Number of waveforms");
+		h4->Write();
+		delete h4;
 	}
-	h4->GetXaxis()->SetTitle("Timing difference PMT1B-PMT1A (ns)");
-	h4->GetYaxis()->SetTitle("Number of waveforms");
-	h4->Write();
-	delete h4;
-
-
-
 	
 	//g1->Write();
 
