@@ -393,6 +393,7 @@ int main(int argc, char* argv[])
 	
 
 	/* Histogram of threshold timing difference */	
+	/* TODO make histograms at all thresholds */
 	timing->cd();
 	for(unsigned int j =0; j < data[0].thresholds.size(); j++)
 	{
@@ -409,6 +410,8 @@ int main(int argc, char* argv[])
 		delete h4;
 	}
 	
+
+	/* TODO graph the mean and sigmas from the threshold plots */
 
 	/* Construct histogram of all pulses */	
 //	for (int i = 0; i < num; i++)
