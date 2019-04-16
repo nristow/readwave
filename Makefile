@@ -1,13 +1,14 @@
-ROOT=`root-config --libs --glibs'
-FILES=readwave.cpp countfiles.cpp
+outname = readWave
+ROOT=`root-config --libs --glibs`
+FILES=readWave.cpp countfiles.cpp fermidirac.cpp
 INCROOT="/usr/include/root/ROOT"
 INCROOT2="/usr/include/root"
 
 default: 
-	g++ -g -Wall `root-config --libs --glibs ` -I/usr/include/root -I/usr/include/root/ROOT readWave.cpp countfiles.cpp fermidirac.cpp -o readWave
+	g++ -g -Wall $(ROOT) -I$(INCROOT) -I$(INCROOT2) $(FILES) -o$(outname)
 
 fast: 
-	g++ -Ofast -march=native `root-config --libs --glibs ` -I/usr/include/root -I/usr/include/root/ROOT readWave.cpp countfiles.cpp fermidirac.cpp -o readWave
+	g++ -Ofast -march=native $(ROOT) -I$(INCROOT) -I$(INCROOT2) $(FILES) -o$(outname)
 
 run:
 	./readWave ../PMT_led_trigger_waveforms 

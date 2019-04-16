@@ -9,7 +9,7 @@ int numFiles(std::string directory)
 
 	if(dp != NULL)
 	{
-		while (ep = readdir(dp))
+		while ((ep = readdir(dp)))
 			i++;
 
 		(void) closedir(dp);
