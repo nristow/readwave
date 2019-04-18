@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <numeric>
 #include <cmath>
+#include <map>
 #include <root/TGraph.h>
 #include <root/TApplication.h>
 #include <root/TH2D.h>
@@ -18,22 +19,40 @@
 #include <root/TF1.h>
 #include <root/TFile.h>
 #include <root/TSpline.h>
+#include <root/TTree.h>
 #include "countfiles.h"
 #include "fermidirac.h"
 
+
+//TODO count number of thresholds and initialize all of the members with the
+//correct size
 class datarun
 {
 	public:
+	std::vector<std::string> pmtnumber = {"2","2"};
+	std::vector<std::string> pmtmanufacturer = {"FEU", "FEU"};
+	std::vector<std::string> pmtpartnumber = {"FEU-84","FEU-84"};
+	std::vector<int> voltages = {1713,1750};
+	std::map<int,std::string> labels;
+	std::string experimenttype = "LED";
+	std::string trigger = "";
 	double uppercutoffthreshold = 1000;
-	std::vector<double> thresholds = {20,30,40,50,60,79};
+	//std::vector<double> thresholds = {20,30,40,50,60,79};
+	std::vector<double> thresholds = {5,10,15,20,40,60};
+	int runnumber = 4;
 	std::vector<std::string> sthresholds;
-	int slidingwindowwidth = 3;
-	double timeoffset = 0.5; // [ns] Time after maximum for fit to continue
+	int slidingwindowwidth = 11;
+	double timeoffset = 5; // [ns] Time after maximum for fit to continue
+	std::vector<double> fitmean;
+	std::vector<double> fitsigma;
 	datarun();
 };
 
 datarun::datarun()
 {
+	labels.insert(std::pair<int,std::string>(0,"A"));
+	labels.insert(std::pair<int,std::string>(1,"B"));
+	
 	for(auto&i : thresholds)
 	{
 		sthresholds.push_back(std::to_string(thresholds[i]));
@@ -52,8 +71,11 @@ struct package
 	std::vector<double> filteredmax = {0,0}; //maximum of the sliding window function. 
 	std::vector<double> halffilteredmax = {0,0};
 	std::vector<double> hfiltmaxtime = {0,0};
-	std::vector<double> differences;
-        std::vector<double> thresholdtimes;
+	std::vector<double> differences = {0,0,0,0,0,0};
+        std::vector<double> thresholdtimesch1 = {0,0,0,0,0,0};
+        std::vector<double> thresholdtimesch2 = {0,0,0,0,0,0};
+	std::vector<double> fitmax = {0,0};
+
 	void setfilteredmax(double value, int channel);
 };
 
@@ -227,6 +249,20 @@ int main(int argc, char* argv[])
 	TDirectory *ch1graphs = file->mkdir("Ch1 pulse graphs");
 	TDirectory *ch2graphs = file->mkdir("Ch2 pulse graphs");
 	TDirectory *timing = file->mkdir("Timing");
+	
+	/* Save run parameters to root file */
+	TTree tree("setup", "Run information");
+	tree.Branch("PMT Manufacturers",&thisrun.pmtmanufacturer);
+	tree.Branch("PMT Part Numbers",&thisrun.pmtpartnumber);
+	tree.Branch("PMT numbers",&thisrun.pmtnumber);
+	tree.Branch("Voltages",&thisrun.voltages);
+	tree.Branch("Experiment Type",&thisrun.experimenttype);
+	tree.Branch("Experiment Trigger",&thisrun.trigger);
+	tree.Branch("Window width",&thisrun.slidingwindowwidth);
+	tree.Branch("Fit time offset",&thisrun.timeoffset);
+
+
+
 
 
 	for(int i = 0; i < num; i++)
@@ -251,7 +287,9 @@ int main(int argc, char* argv[])
 				}
 			}
                         data[i].setfilteredmax(tempmax, k); 
+			
 
+			//this half time of maximum not needed 
 			for(unsigned int j = 0; j < data[i].time.size()-1; j++)
 			{
 				if(data[i].ch1[j] < data[i].halffilteredmax[k]	&& data[i].halffilteredmax[k] < data[i].ch1[j+1])
@@ -290,7 +328,7 @@ int main(int argc, char* argv[])
                                 }
                         }
 
-                        std::string name = "Fit Waveform" + std::to_string(numwaveform) + " PMT " + std::to_string(channel+1);
+                        std::string name = "Fit Waveform" + std::to_string(numwaveform) + " PMT " + thisrun.pmtnumber[channel] + thisrun.labels[channel];
 			TF1 *f1 = new TF1("fermi_dirac_poly", fermi_dirac_parabola, -100, data[numwaveform].maxtime[channel]+thisrun.timeoffset, 5);
 			f1->SetParNames("Alpha","t0","A", "c1", "c2");
                         
@@ -310,19 +348,41 @@ int main(int argc, char* argv[])
                         /* compute threshold crossing time for all thresholds*/
 			/* make differences */
 
+			data[numwaveform].fitmax[channel] = f1->GetMaximum(-100,data[numwaveform].maxtime[channel]+thisrun.timeoffset);
+
+			for(unsigned int thresholdnum = 0; thresholdnum < thisrun.thresholds.size(); thresholdnum++)
+			{
+				if(channel == 0)
+				{
+					data[numwaveform].thresholdtimesch1[thresholdnum] = f1->GetX(thisrun.thresholds[thresholdnum], -100, data[numwaveform].maxtime[channel]);
+				}
+				else
+				{
+					data[numwaveform].thresholdtimesch2[thresholdnum] = f1->GetX(thisrun.thresholds[thresholdnum], -100, data[numwaveform].maxtime[channel]);
+
+				}
+
+			}
+
+			for(unsigned int thresholdnum = 0; thresholdnum < thisrun.thresholds.size(); thresholdnum++)
+			{	
+				data[numwaveform].differences[thresholdnum] = data[numwaveform].thresholdtimesch2[thresholdnum] - data[numwaveform].thresholdtimesch1[thresholdnum];
+			}
                         delete g2;
 			delete c2;
+			delete f1;
                 }
         }
         /* construct histogram of pulse heights */
 	//TODO compute number of bins and extremes for these histograms	
+	//TODO change the titles to mention actual PMT number and part types.
 	stats->cd();
 	std::string histname = "PH2";
-	std::string info = "Pulse Height for PMT-1B";
+	std::string info = "Pulse Height for PMT-" + thisrun.pmtnumber[1] + thisrun.labels[1] + ", " + thisrun.pmtmanufacturer[1] + " " + thisrun.pmtpartnumber[1] + " at " + std::to_string(thisrun.voltages[1]) + "V";
 	TH1D *h1 = new TH1D(histname.c_str(), info.c_str(), 1000, -1, 400);
 	for(int i = 0; i < num ; i++)
 	{
-		h1->Fill(data[i].filteredmax[1]);
+		h1->Fill(data[i].fitmax[1]); //use fit  maximums
 	}
 	h1->GetXaxis()->SetTitle("Maximum Waveform Height (mV)");
 	h1->GetYaxis()->SetTitle("Number of waveforms");
@@ -330,11 +390,11 @@ int main(int argc, char* argv[])
 	delete h1;
 	
 	histname = "PH1";
-	info = "Pulse Height for PMT-1A";
+	info = "Pulse Height for PMT-" + thisrun.pmtnumber[0] + thisrun.labels[0] + ", " + thisrun.pmtmanufacturer[0] + " " + thisrun.pmtpartnumber[0] + " at " + std::to_string(thisrun.voltages[0]) + "V";
 	TH1D *h2 = new TH1D(histname.c_str(), info.c_str(), 1000, -1, 400);
 	for(int i = 0; i < num ; i++)
 	{
-		h2->Fill(data[i].filteredmax[0]);
+		h2->Fill(data[i].fitmax[0]);
 	}
 	h2->GetXaxis()->SetTitle("Maximum Waveform Height (mV)");
 	h2->GetYaxis()->SetTitle("Number of waveforms");
@@ -347,8 +407,8 @@ int main(int argc, char* argv[])
 
 	for(unsigned int i = 0; i < data.size(); i++)
 	{
-		max1.push_back(data[i].filteredmax[0]);
-		max2.push_back(data[i].filteredmax[1]);
+		max1.push_back(data[i].fitmax[0]);
+		max2.push_back(data[i].fitmax[1]);
 	}
 	
 	TCanvas *c1 = new TCanvas("XY Plot", "PMT maximums XY plot");
@@ -361,26 +421,33 @@ int main(int argc, char* argv[])
 	
 
 	/* Histogram of threshold timing difference */	
-	/* TODO make histograms at all thresholds */
-//	timing->cd();
-//	for(unsigned int j =0; j < thisrun.thresholds.size(); j++)
-//	{
-//		std::string histname3 = "Timing Difference " + std::to_string(thisrun.thresholds[j]);
-//		std::string info3 = "Timing difference of PMT's at" + std::to_string(thisrun.thresholds[j]) + "mV";
-//		TH1D *h4 = new TH1D(histname3.c_str(), info3.c_str(), 100000, -100, 100);
-//		for(int i = 0; i < num; i++)
-//		{
-//			h4->Fill(data[i].differences[j]);
-//		}
-//		h4->GetXaxis()->SetTitle("Timing difference PMT1B-PMT1A (ns)");
-//		h4->GetYaxis()->SetTitle("Number of waveforms");
-//		h4->Write();
-//		delete h4;
-//	}
+	
+	timing->cd();
+	for(unsigned int j =0; j < thisrun.thresholds.size(); j++)
+	{
+		std::string histname3 = "Timing Difference " + std::to_string(thisrun.thresholds[j]) + "mV";
+		std::string info3 = "Timing difference of PMT's at" + std::to_string(thisrun.thresholds[j]) + "mV";
+		TH1D *h4 = new TH1D(histname3.c_str(), info3.c_str(), 10000, -100, 100);
+		for(int i = 0; i < num; i++)
+		{
+			h4->Fill(data[i].differences[j]);
+		}
+		h4->GetXaxis()->SetTitle("Timing difference PMT1B-PMT1A (ns)");
+		h4->GetYaxis()->SetTitle("Number of waveforms");
+		h4->Fit("gaus");
+		h4->Write();
+		TF1 *tfff = h4->GetFunction("gaus");
+		thisrun.fitmean[j] = tfff->GetParameter(0); 
+		thisrun.fitsigma[j] = tfff->GetParameter(1);
+		delete tfff;
+		delete h4;
+	}
 	
 
 	/* TODO graph the mean and sigmas from the threshold plots */
+	/* Scatterplot of mean and sigmas from threshold plots above */
 
+	
 
 	file->Write();	
 	file->Close();
