@@ -56,9 +56,9 @@ std::ostream& operator<<(std::ostream&os, const datarun& dr)
 	os << "Trigger: " << dr.trigger << std::endl;
 	os << "PMT " << dr.pmtnumber[0] << "A " << ": " << dr.pmtmanufacturer[0] << " " << dr.pmtpartnumber[0] << " at " << dr.voltages[0] << "V" << std::endl;
 	os << "PMT " << dr.pmtnumber[1] << "A " << ": " << dr.pmtmanufacturer[1] << " " << dr.pmtpartnumber[1] << " at " << dr.voltages[1] << "V" << std::endl;
-	os << "Time offset for waveform fit: " << dr.timeoffset << std::endl;
+	os << "Time offset for waveform fit: " << dr.timeoffset << " ns" << std::endl;
 	os << "Sliding window width: " << dr.slidingwindowwidth << std::endl;
-	os << "Upper cutoff threshold: " << dr.uppercutoffthreshold << std::endl;
+	os << "Upper cutoff threshold: " << dr.uppercutoffthreshold << " mv" << std::endl;
        return os;	
 }
 
@@ -254,7 +254,13 @@ int main(int argc, char* argv[])
         
 	std::string filename = argv[1];
 	filename.erase(0,3);
+	std::string runfile = filename;
 	filename = "data/" + filename + ".root";
+	runfile = "data/" + runfile + ".txt";
+	std::fstream of;
+	of.open(runfile, std::fstream::trunc | std::fstream::out);
+	of << thisrun;
+	of.close();
 
 	TFile *file  = new TFile(filename.c_str(), "RECREATE");
 	//TDirectory *ch1 = file->mkdir("ch1");
