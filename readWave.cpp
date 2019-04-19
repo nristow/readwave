@@ -46,7 +46,21 @@ class datarun
 	std::vector<double> fitmean = {0,0,0,0,0,0};
 	std::vector<double> fitsigma = {0,0,0,0,0,0};
 	datarun();
+	friend std::ostream& operator<<(std::ostream& os, const datarun& dr);
 };
+
+std::ostream& operator<<(std::ostream&os, const datarun& dr)
+{
+	os << "Run Number: " << dr.runnumber << std::endl;
+	os << "Experiment type: " << dr.experimenttype << std::endl;
+	os << "Trigger: " << dr.trigger << std::endl;
+	os << "PMT " << dr.pmtnumber[0] << "A " << ": " << dr.pmtmanufacturer[0] << " " << dr.pmtpartnumber[0] << " at " << dr.voltages[0] << "V" << std::endl;
+	os << "PMT " << dr.pmtnumber[1] << "A " << ": " << dr.pmtmanufacturer[1] << " " << dr.pmtpartnumber[1] << " at " << dr.voltages[1] << "V" << std::endl;
+	os << "Time offset for waveform fit: " << dr.timeoffset << std::endl;
+	os << "Sliding window width: " << dr.slidingwindowwidth << std::endl;
+	os << "Upper cutoff threshold: " << dr.uppercutoffthreshold << std::endl;
+       return os;	
+}
 
 datarun::datarun()
 {
