@@ -32,14 +32,14 @@ class datarun
 	std::vector<std::string> pmtnumber = {"2","2"};
 	std::vector<std::string> pmtmanufacturer = {"FEU", "FEU"};
 	std::vector<std::string> pmtpartnumber = {"FEU-84","FEU-84"};
-	std::vector<int> voltages = {1750,1750};
+	std::vector<int> voltages = {1650,1750};
 	std::map<int,std::string> labels;
 	std::string experimenttype = "LED";
 	std::string trigger = "external";
 	double uppercutoffthreshold = 1000;
 	//std::vector<double> thresholds = {20,30,40,50,60,79};
-	std::vector<double> thresholds = {5,10,15,20,40,60};
-	int runnumber = 6;
+	std::vector<double> thresholds = {5,10,15,20,30,40};
+	int runnumber = 7;
 	std::vector<std::string> sthresholds;
 	int slidingwindowwidth = 11;
 	double timeoffset = 5; // [ns] Time after maximum for fit to continue
@@ -405,6 +405,7 @@ int main(int argc, char* argv[])
 	}
 	h1->GetXaxis()->SetTitle("Maximum Waveform Height (mV)");
 	h1->GetYaxis()->SetTitle("Number of waveforms");
+	h1->Fit("gaus");
 	h1->Write();
 	delete h1;
 	
@@ -417,6 +418,7 @@ int main(int argc, char* argv[])
 	}
 	h2->GetXaxis()->SetTitle("Maximum Waveform Height (mV)");
 	h2->GetYaxis()->SetTitle("Number of waveforms");
+	h2->Fit("gaus");
 	h2->Write();
 	delete h2;
 
