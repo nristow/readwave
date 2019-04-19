@@ -32,19 +32,19 @@ class datarun
 	std::vector<std::string> pmtnumber = {"2","2"};
 	std::vector<std::string> pmtmanufacturer = {"FEU", "FEU"};
 	std::vector<std::string> pmtpartnumber = {"FEU-84","FEU-84"};
-	std::vector<int> voltages = {1713,1750};
+	std::vector<int> voltages = {1750,1750};
 	std::map<int,std::string> labels;
 	std::string experimenttype = "LED";
-	std::string trigger = "";
+	std::string trigger = "external";
 	double uppercutoffthreshold = 1000;
 	//std::vector<double> thresholds = {20,30,40,50,60,79};
 	std::vector<double> thresholds = {5,10,15,20,40,60};
-	int runnumber = 4;
+	int runnumber = 6;
 	std::vector<std::string> sthresholds;
 	int slidingwindowwidth = 11;
 	double timeoffset = 5; // [ns] Time after maximum for fit to continue
-	std::vector<double> fitmean;
-	std::vector<double> fitsigma;
+	std::vector<double> fitmean = {0,0,0,0,0,0};
+	std::vector<double> fitsigma = {0,0,0,0,0,0};
 	datarun();
 };
 
@@ -339,6 +339,7 @@ int main(int argc, char* argv[])
                         g2->GetXaxis()->SetTitle("Time (ns)");
                         std::string title = "Waveform " + std::to_string(numwaveform) + " fitting";
                         g2->SetTitle(title.c_str());
+			g2->SetMarkerStyle(7);
                         g2->GetYaxis()->SetTitle("Amplitude (mV)");
                         g2->SetName(Form("g%d",numwaveform) );
                         g2->Draw("AP");
@@ -374,8 +375,6 @@ int main(int argc, char* argv[])
                 }
         }
         /* construct histogram of pulse heights */
-	//TODO compute number of bins and extremes for these histograms	
-	//TODO change the titles to mention actual PMT number and part types.
 	stats->cd();
 	std::string histname = "PH2";
 	std::string info = "Pulse Height for PMT-" + thisrun.pmtnumber[1] + thisrun.labels[1] + ", " + thisrun.pmtmanufacturer[1] + " " + thisrun.pmtpartnumber[1] + " at " + std::to_string(thisrun.voltages[1]) + "V";
@@ -415,10 +414,13 @@ int main(int argc, char* argv[])
 	TGraph * g1 = new TGraph(data.size(),&max1[0],&max2[0]);
 	g1->GetXaxis()->SetTitle("PMT-1A maximum (mV)");
 	g1->GetYaxis()->SetTitle("PMT-1B maximum (mV)");
+        g1->SetMarkerStyle(7);
 	g1->SetDrawOption("AP");
 	g1->Draw("AP");
 	c1->Write();
 	
+	delete c1;
+	delete g1;
 
 	/* Histogram of threshold timing difference */	
 	
@@ -427,7 +429,7 @@ int main(int argc, char* argv[])
 	{
 		std::string histname3 = "Timing Difference " + std::to_string(thisrun.thresholds[j]) + "mV";
 		std::string info3 = "Timing difference of PMT's at" + std::to_string(thisrun.thresholds[j]) + "mV";
-		TH1D *h4 = new TH1D(histname3.c_str(), info3.c_str(), 10000, -100, 100);
+		TH1D *h4 = new TH1D(histname3.c_str(), info3.c_str(), 400, -100, 100);
 		for(int i = 0; i < num; i++)
 		{
 			h4->Fill(data[i].differences[j]);
@@ -444,10 +446,30 @@ int main(int argc, char* argv[])
 	}
 	
 
-	/* TODO graph the mean and sigmas from the threshold plots */
-	/* Scatterplot of mean and sigmas from threshold plots above */
+	/* graph of the mean from the threshold plots */
+	TCanvas *c10 = new TCanvas("Mean Plot", "PMT Timing means");
+	TGraph *g10 = new TGraph(thisrun.fitmean.size(),&thisrun.thresholds[0],&thisrun.fitmean[0]);
+	g10->GetXaxis()->SetTitle("Threshold");
+	g10->GetYaxis()->SetTitle("Mean of timing fit");
+	g10->SetMarkerStyle(7);
+	g10->SetDrawOption("AP");
+	g10->Draw("AP");
+	c10->Write();
+	delete c10;
+	delete g10;
 
+	/* Scatterplot of mean and sigmas from threshold plots above */
+	TCanvas *c5 = new TCanvas("XY Plot Timing", "PMT Timing sigmas vs means");
+	TGraph * g5 = new TGraph(thisrun.fitmean.size(),&thisrun.fitmean[0],&thisrun.fitsigma[0]);
+	g5->GetXaxis()->SetTitle("Means");
+	g5->GetYaxis()->SetTitle("Sigmas");
+	g5->SetMarkerStyle(7);
+	g5->SetDrawOption("AP");
+	g5->Draw("AP");
+	c5->Write();
 	
+	delete c5;
+	delete g5;
 
 	file->Write();	
 	file->Close();
