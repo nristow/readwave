@@ -9,6 +9,7 @@
 #include <cmath>
 #include <map>
 #include <root/TGraph.h>
+#include <root/TGraphErrors.h>
 #include <root/TApplication.h>
 #include <root/TH2D.h>
 #include <root/TH1D.h>
@@ -23,28 +24,27 @@
 #include "countfiles.h"
 #include "fermidirac.h"
 
-
-//TODO count number of thresholds and initialize all of the members with the
-//correct size
+// TODO read in file to set these parameters
 class datarun
 {
 	public:
 	std::vector<std::string> pmtnumber = {"2","2"};
 	std::vector<std::string> pmtmanufacturer = {"FEU", "FEU"};
 	std::vector<std::string> pmtpartnumber = {"FEU-84","FEU-84"};
-	std::vector<int> voltages = {1650,1750};
+	std::vector<int> voltages = {1850,1850};
 	std::map<int,std::string> labels;
-	std::string experimenttype = "LED";
-	std::string trigger = "external";
-	double uppercutoffthreshold = 1000;
+	std::string experimenttype = "Cosmics";
+	std::string trigger = "Discriminator";
+	double uppercutoffthreshold = 100;
 	//std::vector<double> thresholds = {20,30,40,50,60,79};
-	std::vector<double> thresholds = {5,10,15,20,30,40};
-	int runnumber = 7;
+	std::vector<double> thresholds = {5,10,20,40,60,80};
+	int runnumber = 16;
 	std::vector<std::string> sthresholds;
-	int slidingwindowwidth = 11;
-	double timeoffset = 5; // [ns] Time after maximum for fit to continue
+	int slidingwindowwidth = 7;
+	double timeoffset = 3; // [ns] Time after maximum for fit to continue
 	std::vector<double> fitmean = {0,0,0,0,0,0};
 	std::vector<double> fitsigma = {0,0,0,0,0,0};
+	std::vector<double> fitmaxX = {0,0,0,0,0,0};
 	datarun();
 	friend std::ostream& operator<<(std::ostream& os, const datarun& dr);
 };
@@ -71,27 +71,40 @@ datarun::datarun()
 	{
 		sthresholds.push_back(std::to_string(thresholds[i]));
 	}
+
+	fitmean.resize(thresholds.size(), 0);
+	fitsigma.resize(thresholds.size(), 0);
+	fitmaxX.resize(thresholds.size(), 0);
 }
 		
-struct package
+class package
 {
-	std::vector<double> time;
-	std::vector<double> ch1;
-	std::vector<double> ch2;
-	std::vector<double> max; // 0=ch1 1=ch2 ... maximum of all datapoints
-        std::vector<double> maxtime;
-	std::vector<double> min;
-	std::vector<double> ymulti;
-	std::vector<double> filteredmax = {0,0}; //maximum of the sliding window function. 
-	std::vector<double> halffilteredmax = {0,0};
-	std::vector<double> hfiltmaxtime = {0,0};
-	std::vector<double> differences = {0,0,0,0,0,0};
-        std::vector<double> thresholdtimesch1 = {0,0,0,0,0,0};
-        std::vector<double> thresholdtimesch2 = {0,0,0,0,0,0};
-	std::vector<double> fitmax = {0,0};
+	public:
+		std::vector<double> time;
+		std::vector<double> ch1;
+		std::vector<double> ch2;
+		std::vector<double> max; // 0=ch1 1=ch2 ... maximum of all datapoints
+		std::vector<double> maxtime;
+		std::vector<double> min;
+		std::vector<double> ymulti;
+		std::vector<double> filteredmax = {0,0}; //maximum of the sliding window function. 
+		std::vector<double> halffilteredmax = {0,0};
+		std::vector<double> hfiltmaxtime = {0,0};
+		std::vector<double> differences = {0,0,0,0,0,0};
+		std::vector<double> thresholdtimesch1 = {0,0,0,0,0,0};
+		std::vector<double> thresholdtimesch2 = {0,0,0,0,0,0};
+		std::vector<double> fitmax = {0,0};
 
-	void setfilteredmax(double value, int channel);
+		void setfilteredmax(double value, int channel);
+		void setnumberofthresholds(unsigned int num);
 };
+
+void package::setnumberofthresholds(unsigned int num)
+{
+	differences.resize(num,0);
+	thresholdtimesch1.resize(num,0);
+	thresholdtimesch2.resize(num,0);
+}
 
 void package::setfilteredmax(double value, int channel)
 {
@@ -133,8 +146,6 @@ int main(int argc, char* argv[])
 		filebase.pop_back();
 	
 	int num = numFiles(filebase);
-        int numcutoff(0);		//used to set num to how many files have passed threshold
-	//const int numtocheck = 10;	//debugging small batch
 	if (num == -1)
 	{
 		std::cout << "Directory doesn't exist" << std::endl;
@@ -148,7 +159,7 @@ int main(int argc, char* argv[])
 	std::vector<package> data; 
 
 	bool oldheader = false;
-	
+	int numcutoff = 0;	
 	for(int i=0; i < num ; i++)
 	{
 		std::ifstream file;	
@@ -161,6 +172,8 @@ int main(int argc, char* argv[])
 		std::vector<double> ch2;
 
 		package temp;
+		temp.setnumberofthresholds(thisrun.thresholds.size());
+
 		if(oldheader == false)
 		{
 			for(int i = 0; i < 12; i++)
@@ -247,9 +260,8 @@ int main(int argc, char* argv[])
                 file.close();
                 
 	}
-        std::cout << numcutoff << " files under cutoff threshold\n";
-        
-        
+        std::cout << numcutoff << " files under cutoff threshold of " << thisrun.uppercutoffthreshold << " mv" << std::endl;
+         
         num = numcutoff; // total number of waveforms under threshold, set above
         
 	std::string filename = argv[1];
@@ -355,7 +367,7 @@ int main(int argc, char* argv[])
 			TCanvas *c2 = new TCanvas(name.c_str(), "Waveform fitting");
 			TGraph * g2 = new TGraph(data[numwaveform].time.size(),&x[0],&y[0]);
                         f1->SetParameters(1, data[numwaveform].maxtime[channel], data[numwaveform].filteredmax[channel],0,0);
-                        g2->Fit(f1, "Q", "",-100,data[numwaveform].maxtime[channel]+thisrun.timeoffset);	
+                        int status = g2->Fit(f1, "Q", "",-100,data[numwaveform].maxtime[channel]+thisrun.timeoffset);	
                         g2->GetXaxis()->SetTitle("Time (ns)");
                         std::string title = "Waveform " + std::to_string(numwaveform) + " fitting";
                         g2->SetTitle(title.c_str());
@@ -366,6 +378,10 @@ int main(int argc, char* argv[])
                         f1->Draw("SAME");
                         c2->Write();
 
+			if(status < 0 || (status > 0 && status != 4))
+			{
+				std::cout << "Fit of channel " << channel << " waveform " << numwaveform << " returned " << status << std::endl;
+			}
                         /* compute threshold crossing time for all thresholds*/
 			/* make differences */
 
@@ -398,7 +414,7 @@ int main(int argc, char* argv[])
 	stats->cd();
 	std::string histname = "PH2";
 	std::string info = "Pulse Height for PMT-" + thisrun.pmtnumber[1] + thisrun.labels[1] + ", " + thisrun.pmtmanufacturer[1] + " " + thisrun.pmtpartnumber[1] + " at " + std::to_string(thisrun.voltages[1]) + "V";
-	TH1D *h1 = new TH1D(histname.c_str(), info.c_str(), 1000, -1, 400);
+	TH1D *h1 = new TH1D(histname.c_str(), info.c_str(), 3000, -1, 2000);
 	for(int i = 0; i < num ; i++)
 	{
 		h1->Fill(data[i].fitmax[1]); //use fit  maximums
@@ -411,11 +427,12 @@ int main(int argc, char* argv[])
 	
 	histname = "PH1";
 	info = "Pulse Height for PMT-" + thisrun.pmtnumber[0] + thisrun.labels[0] + ", " + thisrun.pmtmanufacturer[0] + " " + thisrun.pmtpartnumber[0] + " at " + std::to_string(thisrun.voltages[0]) + "V";
-	TH1D *h2 = new TH1D(histname.c_str(), info.c_str(), 1000, -1, 400);
+	TH1D *h2 = new TH1D(histname.c_str(), info.c_str(), 3000, -1, 2000);
 	for(int i = 0; i < num ; i++)
 	{
 		h2->Fill(data[i].fitmax[0]);
 	}
+
 	h2->GetXaxis()->SetTitle("Maximum Waveform Height (mV)");
 	h2->GetYaxis()->SetTitle("Number of waveforms");
 	h2->Fit("gaus");
@@ -434,8 +451,10 @@ int main(int argc, char* argv[])
 	
 	TCanvas *c1 = new TCanvas("XY Plot", "PMT maximums XY plot");
 	TGraph * g1 = new TGraph(data.size(),&max1[0],&max2[0]);
-	g1->GetXaxis()->SetTitle("PMT-1A maximum (mV)");
-	g1->GetYaxis()->SetTitle("PMT-1B maximum (mV)");
+	std::string pmta = "PMT-" + thisrun.pmtnumber[0] + thisrun.labels[0] + " maximum [mV]";
+	std::string pmtb = "PMT-" + thisrun.pmtnumber[1] + thisrun.labels[1] + " maximum [mV]";
+	g1->GetXaxis()->SetTitle(pmta.c_str());
+	g1->GetYaxis()->SetTitle(pmtb.c_str());
         g1->SetMarkerStyle(7);
 	g1->SetDrawOption("AP");
 	g1->Draw("AP");
@@ -461,19 +480,23 @@ int main(int argc, char* argv[])
 		h4->Fit("gaus");
 		h4->Write();
 		TF1 *tfff = h4->GetFunction("gaus");
-		thisrun.fitmean[j] = tfff->GetParameter(0); 
-		thisrun.fitsigma[j] = tfff->GetParameter(1);
+		thisrun.fitmean[j] = tfff->GetParameter(1); 
+		thisrun.fitsigma[j] = tfff->GetParameter(2);
+		thisrun.fitmaxX[j] = tfff->GetMaximumX();
 		delete tfff;
 		delete h4;
 	}
 	
 
 	/* graph of the mean from the threshold plots */
+	std::vector<double> zero(0,6);
 	TCanvas *c10 = new TCanvas("Mean Plot", "PMT Timing means");
-	TGraph *g10 = new TGraph(thisrun.fitmean.size(),&thisrun.thresholds[0],&thisrun.fitmean[0]);
+	TGraph *g10 = new TGraph(thisrun.fitmean.size(),&thisrun.thresholds[0],&thisrun.fitmaxX[0]);
 	g10->GetXaxis()->SetTitle("Threshold");
 	g10->GetYaxis()->SetTitle("Mean of timing fit");
 	g10->SetMarkerStyle(7);
+	g10->SetMarkerColor(4);
+	g10->SetTitle("Mean of difference thresholds");
 	g10->SetDrawOption("AP");
 	g10->Draw("AP");
 	c10->Write();
@@ -486,6 +509,7 @@ int main(int argc, char* argv[])
 	g5->GetXaxis()->SetTitle("Means");
 	g5->GetYaxis()->SetTitle("Sigmas");
 	g5->SetMarkerStyle(7);
+	g5->SetMarkerColor(4);
 	g5->SetDrawOption("AP");
 	g5->Draw("AP");
 	c5->Write();
