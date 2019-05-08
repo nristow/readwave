@@ -28,17 +28,18 @@
 class datarun
 {
 	public:
-	std::vector<std::string> pmtnumber = {"2","2"};
-	std::vector<std::string> pmtmanufacturer = {"FEU", "FEU"};
-	std::vector<std::string> pmtpartnumber = {"FEU-84","FEU-84"};
-	std::vector<int> voltages = {1850,1850};
+	bool invertwaveforms = true;
+	std::vector<std::string> pmtnumber = {"1","2"};
+	std::vector<std::string> pmtmanufacturer = {"OnSemi", "OnSemi"};
+	std::vector<std::string> pmtpartnumber = {"C-Series","C-Series"};
+	std::vector<int> voltages = {30,30};
 	std::map<int,std::string> labels;
 	std::string experimenttype = "Cosmics";
 	std::string trigger = "Discriminator";
-	double uppercutoffthreshold = 100;
+	double uppercutoffthreshold = 90;
 	//std::vector<double> thresholds = {20,30,40,50,60,79};
-	std::vector<double> thresholds = {5,10,20,40,60,80};
-	int runnumber = 16;
+	std::vector<double> thresholds = {5,6,8,10,12,9};
+	int runnumber = 17;
 	std::vector<std::string> sthresholds;
 	int slidingwindowwidth = 7;
 	double timeoffset = 3; // [ns] Time after maximum for fit to continue
@@ -59,6 +60,7 @@ std::ostream& operator<<(std::ostream&os, const datarun& dr)
 	os << "Time offset for waveform fit: " << dr.timeoffset << " ns" << std::endl;
 	os << "Sliding window width: " << dr.slidingwindowwidth << std::endl;
 	os << "Upper cutoff threshold: " << dr.uppercutoffthreshold << " mv" << std::endl;
+	os << "Waveform inverted?: " << dr.invertwaveforms << std::endl;
        return os;	
 }
 
@@ -217,9 +219,19 @@ int main(int argc, char* argv[])
 
 			ss >> d >> std::ws >> a >> std::ws >> b;
 			/* all 3 channels are inverted */
-			a = -a * scale;
-			b = -b * scale;
-			d *= timescale;	
+			if(thisrun.invertwaveforms == true)
+			{
+				a = -a * scale;
+				b = -b * scale;
+				d *= timescale;	
+			}
+			else
+			{
+		
+				a = a * scale;
+				b = b * scale;
+				d *= timescale;	
+			}
 			temp.time.push_back(d);
 			temp.ch1.push_back(a);
 			temp.ch2.push_back(b);
@@ -278,8 +290,8 @@ int main(int argc, char* argv[])
 	//TDirectory *ch1 = file->mkdir("ch1");
 	//TDirectory *ch2 = file->mkdir("ch2");
 	TDirectory *stats = file->mkdir("stats");
-	TDirectory *ch1graphs = file->mkdir("Ch1 pulse graphs");
-	TDirectory *ch2graphs = file->mkdir("Ch2 pulse graphs");
+	TDirectory *ch1graphs = file->mkdir("Ch1_pulse_graphs");
+	TDirectory *ch2graphs = file->mkdir("Ch2_pulse_graphs");
 	TDirectory *timing = file->mkdir("Timing");
 	
 	/* Save run parameters to root file */
@@ -296,6 +308,7 @@ int main(int argc, char* argv[])
 
 
 
+	std::cout << "reading waveforms" << std::endl;
 
 	for(int i = 0; i < num; i++)
 	{
@@ -334,6 +347,8 @@ int main(int argc, char* argv[])
 
         /* Plot graphs of waveforms below cutoff and fit them */
         /* Find the fit maximum and threshold positions in time */
+
+	std::cout << "Creating waveform graphs" << std::endl;
         
 	for(int channel = 0; channel < 2; channel++)
         {        
@@ -360,11 +375,11 @@ int main(int argc, char* argv[])
                                 }
                         }
 
-                        std::string name = "Fit Waveform" + std::to_string(numwaveform) + " PMT " + thisrun.pmtnumber[channel] + thisrun.labels[channel];
+                        std::string name = "Fit_Waveform" + std::to_string(numwaveform) + "_PMT_" + thisrun.pmtnumber[channel] + thisrun.labels[channel];
 			TF1 *f1 = new TF1("fermi_dirac_poly", fermi_dirac_parabola, -100, data[numwaveform].maxtime[channel]+thisrun.timeoffset, 5);
 			f1->SetParNames("Alpha","t0","A", "c1", "c2");
                         
-			TCanvas *c2 = new TCanvas(name.c_str(), "Waveform fitting");
+			TCanvas *c2 = new TCanvas(name.c_str(), "Waveform_fitting");
 			TGraph * g2 = new TGraph(data[numwaveform].time.size(),&x[0],&y[0]);
                         f1->SetParameters(1, data[numwaveform].maxtime[channel], data[numwaveform].filteredmax[channel],0,0);
                         int status = g2->Fit(f1, "Q", "",-100,data[numwaveform].maxtime[channel]+thisrun.timeoffset);	
@@ -410,6 +425,10 @@ int main(int argc, char* argv[])
 			delete f1;
                 }
         }
+
+
+	std::cout << "Pulse height histograms" << std::endl;
+
         /* construct histogram of pulse heights */
 	stats->cd();
 	std::string histname = "PH2";
@@ -439,6 +458,8 @@ int main(int argc, char* argv[])
 	h2->Write();
 	delete h2;
 
+	std::cout << "Scatter plots" << std::endl;
+
 	/* Scatterplot of amplitudes of PMT's */
 	std::vector<double> max1;
 	std::vector<double> max2;
@@ -454,6 +475,7 @@ int main(int argc, char* argv[])
 	std::string pmta = "PMT-" + thisrun.pmtnumber[0] + thisrun.labels[0] + " maximum [mV]";
 	std::string pmtb = "PMT-" + thisrun.pmtnumber[1] + thisrun.labels[1] + " maximum [mV]";
 	g1->GetXaxis()->SetTitle(pmta.c_str());
+	g1->GetXaxis()->SetTitle("PMT Timing Difference");
 	g1->GetYaxis()->SetTitle(pmtb.c_str());
         g1->SetMarkerStyle(7);
 	g1->SetDrawOption("AP");
@@ -464,6 +486,8 @@ int main(int argc, char* argv[])
 	delete g1;
 
 	/* Histogram of threshold timing difference */	
+
+	std::cout << "Threshold Timing plots" << std::endl;
 	
 	timing->cd();
 	for(unsigned int j =0; j < thisrun.thresholds.size(); j++)
