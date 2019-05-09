@@ -29,10 +29,10 @@ class datarun
 {
 	public:
 	bool invertwaveforms = true;
-	std::vector<std::string> pmtnumber = {"1","2"};
-	std::vector<std::string> pmtmanufacturer = {"OnSemi", "OnSemi"};
-	std::vector<std::string> pmtpartnumber = {"C-Series","C-Series"};
-	std::vector<int> voltages = {30,30};
+	std::vector<std::string> pmtnumber = {"2A","2B"};
+	std::vector<std::string> pmtmanufacturer = {"FEU", "FEU"};
+	std::vector<std::string> pmtpartnumber = {"84","84"};
+	std::vector<int> voltages = {1850,1850};
 	std::map<int,std::string> labels;
 	std::string experimenttype = "Cosmics";
 	std::string trigger = "Discriminator";
@@ -46,6 +46,7 @@ class datarun
 	std::vector<double> fitmean = {0,0,0,0,0,0};
 	std::vector<double> fitsigma = {0,0,0,0,0,0};
 	std::vector<double> fitmaxX = {0,0,0,0,0,0};
+	int dccount = 500;
 	datarun();
 	friend std::ostream& operator<<(std::ostream& os, const datarun& dr);
 };
@@ -55,11 +56,17 @@ std::ostream& operator<<(std::ostream&os, const datarun& dr)
 	os << "Run Number: " << dr.runnumber << std::endl;
 	os << "Experiment type: " << dr.experimenttype << std::endl;
 	os << "Trigger: " << dr.trigger << std::endl;
-	os << "PMT " << dr.pmtnumber[0] << "A " << ": " << dr.pmtmanufacturer[0] << " " << dr.pmtpartnumber[0] << " at " << dr.voltages[0] << "V" << std::endl;
-	os << "PMT " << dr.pmtnumber[1] << "A " << ": " << dr.pmtmanufacturer[1] << " " << dr.pmtpartnumber[1] << " at " << dr.voltages[1] << "V" << std::endl;
-	os << "Time offset for waveform fit: " << dr.timeoffset << " ns" << std::endl;
+	os << "PMT " << dr.pmtnumber[0] << "A " << ": " << dr.pmtmanufacturer[0] \
+		<< " " << dr.pmtpartnumber[0] << " at " << dr.voltages[0] << "V" \
+		<< std::endl;
+	os << "PMT " << dr.pmtnumber[1] << "A " << ": " << dr.pmtmanufacturer[1] \
+		<< " " << dr.pmtpartnumber[1] << " at " << dr.voltages[1] << "V" \
+		<< std::endl;
+	os << "Time offset for waveform fit: " << dr.timeoffset << " ns" \
+		<< std::endl;
 	os << "Sliding window width: " << dr.slidingwindowwidth << std::endl;
-	os << "Upper cutoff threshold: " << dr.uppercutoffthreshold << " mv" << std::endl;
+	os << "Upper cutoff threshold: " << dr.uppercutoffthreshold << " mv" \
+		<< std::endl;
 	os << "Waveform inverted?: " << dr.invertwaveforms << std::endl;
        return os;	
 }
@@ -96,7 +103,7 @@ class package
 		std::vector<double> thresholdtimesch1 = {0,0,0,0,0,0};
 		std::vector<double> thresholdtimesch2 = {0,0,0,0,0,0};
 		std::vector<double> fitmax = {0,0};
-
+		std::vector<double> dcoffset = {0,0};
 		void setfilteredmax(double value, int channel);
 		void setnumberofthresholds(unsigned int num);
 };
@@ -212,6 +219,7 @@ int main(int argc, char* argv[])
 		const double scale = 1000; // scale to mV level
                 const double timescale = 1E9;
 		double mina(100),minb(100), maxa(-100), maxb(-100), tmaxa(0),tmaxb(0);
+
 		for (std::string line; std::getline(file, line); )
 		{
 			std::stringstream ss(line);
@@ -272,10 +280,31 @@ int main(int argc, char* argv[])
                 file.close();
                 
 	}
-        std::cout << numcutoff << " files under cutoff threshold of " << thisrun.uppercutoffthreshold << " mv" << std::endl;
+        std::cout << numcutoff << " files under cutoff threshold of " \
+		<< thisrun.uppercutoffthreshold << " mv" << std::endl;
          
         num = numcutoff; // total number of waveforms under threshold, set above
-        
+       
+       /* determine dc offset of each waveform based on the first dccount samples
+	* */
+	std::cout << "Computing DC offsets" << std::endl;
+
+	for(int k = 0; k < 2; k++)
+	{
+		for(int i = 0; i < num; i++)
+		{
+			double sum = 0;
+			for(int j = 0; j < thisrun.dccount; j++)
+			{
+				if (k == 0)
+					sum += data[i].ch1[j];
+				else if (k == 1)
+					sum += data[i].ch2[j];
+				data[i].dcoffset[k] = sum/thisrun.dccount;
+			}
+		}
+	}
+
 	std::string filename = argv[1];
 	filename.erase(0,3);
 	std::string runfile = filename;
@@ -305,9 +334,6 @@ int main(int argc, char* argv[])
 	tree.Branch("Window width",&thisrun.slidingwindowwidth);
 	tree.Branch("Fit time offset",&thisrun.timeoffset);
 
-
-
-
 	std::cout << "reading waveforms" << std::endl;
 
 	for(int i = 0; i < num; i++)
@@ -332,16 +358,6 @@ int main(int argc, char* argv[])
 				}
 			}
                         data[i].setfilteredmax(tempmax, k); 
-			
-
-			//this half time of maximum not needed 
-			for(unsigned int j = 0; j < data[i].time.size()-1; j++)
-			{
-				if(data[i].ch1[j] < data[i].halffilteredmax[k]	&& data[i].halffilteredmax[k] < data[i].ch1[j+1])
-				{
-					data[i].hfiltmaxtime[k] = data[i].time[j];
-				}
-			}
 		}                       
 	}
 
@@ -369,20 +385,25 @@ int main(int argc, char* argv[])
                                         x.push_back(data[numwaveform].time[j]);
                                 }
                                 else
-                                {
-                                        y.push_back(data[numwaveform].ch2[j]);
-                                        x.push_back(data[numwaveform].time[j]);
-                                }
+				{
+					y.push_back(data[numwaveform].ch2[j]);
+					x.push_back(data[numwaveform].time[j]);
+				}
                         }
 
-                        std::string name = "Fit_Waveform" + std::to_string(numwaveform) + "_PMT_" + thisrun.pmtnumber[channel] + thisrun.labels[channel];
-			TF1 *f1 = new TF1("fermi_dirac_poly", fermi_dirac_parabola, -100, data[numwaveform].maxtime[channel]+thisrun.timeoffset, 5);
+                        std::string name = "Fit_Waveform" + std::to_string(numwaveform) + "_PMT_" \
+					    + thisrun.pmtnumber[channel] + thisrun.labels[channel];
+			
+			TF1 *f1 = new TF1("fermi_dirac_poly",\
+				       	  fermi_dirac_parabola, -100, \
+					  data[numwaveform].maxtime[channel]+thisrun.timeoffset, 5);
+			
 			f1->SetParNames("Alpha","t0","A", "c1", "c2");
                         
 			TCanvas *c2 = new TCanvas(name.c_str(), "Waveform_fitting");
 			TGraph * g2 = new TGraph(data[numwaveform].time.size(),&x[0],&y[0]);
                         f1->SetParameters(1, data[numwaveform].maxtime[channel], data[numwaveform].filteredmax[channel],0,0);
-                        int status = g2->Fit(f1, "Q", "",-100,data[numwaveform].maxtime[channel]+thisrun.timeoffset);	
+                        int status = g2->Fit(f1, "Q", "",-100,data[numwaveform].maxtime[channel]);	
                         g2->GetXaxis()->SetTitle("Time (ns)");
                         std::string title = "Waveform " + std::to_string(numwaveform) + " fitting";
                         g2->SetTitle(title.c_str());
@@ -395,22 +416,28 @@ int main(int argc, char* argv[])
 
 			if(status < 0 || (status > 0 && status != 4))
 			{
-				std::cout << "Fit of channel " << channel << " waveform " << numwaveform << " returned " << status << std::endl;
+				std::cout << "Fit of channel " << channel << " waveform " \
+					<< numwaveform << " returned " << status << std::endl;
 			}
                         /* compute threshold crossing time for all thresholds*/
 			/* make differences */
+			/* dubtract DC offset found above */
 
-			data[numwaveform].fitmax[channel] = f1->GetMaximum(-100,data[numwaveform].maxtime[channel]+thisrun.timeoffset);
+			data[numwaveform].fitmax[channel] = \
+				f1->GetMaximum(-100,data[numwaveform].maxtime[channel]+thisrun.timeoffset) \
+					    - data[numwaveform].dcoffset[channel];
 
 			for(unsigned int thresholdnum = 0; thresholdnum < thisrun.thresholds.size(); thresholdnum++)
 			{
 				if(channel == 0)
 				{
-					data[numwaveform].thresholdtimesch1[thresholdnum] = f1->GetX(thisrun.thresholds[thresholdnum], -100, data[numwaveform].maxtime[channel]);
+					data[numwaveform].thresholdtimesch1[thresholdnum] = \
+						f1->GetX(thisrun.thresholds[thresholdnum], -100, data[numwaveform].maxtime[channel]);
 				}
 				else
 				{
-					data[numwaveform].thresholdtimesch2[thresholdnum] = f1->GetX(thisrun.thresholds[thresholdnum], -100, data[numwaveform].maxtime[channel]);
+					data[numwaveform].thresholdtimesch2[thresholdnum] = \
+						f1->GetX(thisrun.thresholds[thresholdnum], -100, data[numwaveform].maxtime[channel]);
 
 				}
 
@@ -418,7 +445,10 @@ int main(int argc, char* argv[])
 
 			for(unsigned int thresholdnum = 0; thresholdnum < thisrun.thresholds.size(); thresholdnum++)
 			{	
-				data[numwaveform].differences[thresholdnum] = data[numwaveform].thresholdtimesch2[thresholdnum] - data[numwaveform].thresholdtimesch1[thresholdnum];
+				data[numwaveform].differences[thresholdnum] = \
+					data[numwaveform].thresholdtimesch2[thresholdnum] \
+				      - data[numwaveform].thresholdtimesch1[thresholdnum];
+
 			}
                         delete g2;
 			delete c2;
