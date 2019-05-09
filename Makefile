@@ -1,11 +1,10 @@
 outname = readWave
-ROOT=`root-config --libs --glibs`
+ROOT != root-config --libs --glibs
 FILES=readWave.cpp countfiles.cpp fermidirac.cpp
-INCROOT="/usr/include/root/ROOT"
-INCROOT2="/usr/include/root"
+INCROOT != root-config --incdir
 
 default: 
-	g++ -g -Wall $(ROOT) -I$(INCROOT) -I$(INCROOT2) $(FILES) -o$(outname)
+	g++ -g -Wall $(ROOT) -I$(INCROOT) $(FILES) -o$(outname)
 
 fast: 
 	g++ -Ofast -march=native $(ROOT) -I$(INCROOT) -I$(INCROOT2) $(FILES) -o$(outname)
