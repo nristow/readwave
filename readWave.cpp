@@ -539,31 +539,31 @@ int main(int argc, char* argv[])
 	delete h2;
 
 	std::cout << "Scatter plots" << std::endl;
-	// TODO change graph to histogram
+	
 	/* Scatterplot of amplitudes of PMT's */
-	std::vector<double> max1;
-	std::vector<double> max2;
-
-	for(unsigned int i = 0; i < data.size(); i++)
+	/* store maximum of all waveforms to determine size of histogram */
+	double maxch1 = 0;
+	double maxch2 = 0;
+	for(int i = 0; i < num; i++)
 	{
-		max1.push_back(data[i].fitmax[0]);
-		max2.push_back(data[i].fitmax[1]);
+		if(data[i].fitmax[0] > maxch1)
+			maxch1 = data[i].fitmax[0];
+		if(data[i].fitmax[1] > maxch2)
+			maxch2 = data[i].fitmax[1];
 	}
-	
-	TCanvas *c1 = new TCanvas("XY Plot", "Maximums XY plot");
-	TGraph * g1 = new TGraph(data.size(),&max1[0],&max2[0]);
-	std::string pmta = thisrun.pmtnumber[0] + " maximum [mV]";
-	std::string pmtb = thisrun.pmtnumber[1] + " maximum [mV]";
-	g1->GetXaxis()->SetTitle(pmta.c_str());
-	//g1->GetXaxis()->SetTitle("PMT Timing Difference");
-	g1->GetYaxis()->SetTitle(pmtb.c_str());
-        g1->SetMarkerStyle(7);
-	g1->SetDrawOption("AP");
-	g1->Draw("AP");
-	c1->Write();
-	
-	delete c1;
-	delete g1;
+	TCanvas* c20 = new TCanvas("XY_plot", "XY scatterplot");
+	TH2D* h20 = new TH2D("h2dxy", "XY Scatterplot", 256, 0, maxch1, 256, 0, maxch2);
+	for(int i = 0; i < num; i++)
+	{
+		h20->Fill(data[i].fitmax[0], data[i].fitmax[1]);
+	}
+	h20->SetMarkerStyle(20);
+	h20->GetXaxis()->SetTitle("ch1 amplitudes [mV]");
+	h20->GetYaxis()->SetTitle("ch2 amplitudes [mV]");
+	h20->Draw("AP");
+	c20->Write();
+	delete h20;
+	delete c20;	
 
 	/* Histogram of threshold timing difference */	
 
