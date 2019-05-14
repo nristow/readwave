@@ -7,7 +7,7 @@ default:
 	g++ -g -Wall $(ROOT) -I$(INCROOT) $(FILES) -o$(outname)
 
 fast: 
-	g++ -Ofast -march=native $(ROOT) -I$(INCROOT) -I$(INCROOT2) $(FILES) -o$(outname)
+	g++ -Ofast -march=native $(ROOT) -I$(INCROOT) $(FILES) -o$(outname)
 
 run:
 	./readWave ../PMT_led_trigger_waveforms 
