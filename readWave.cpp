@@ -29,24 +29,24 @@ class datarun
 {
 	public:
 	bool invertwaveforms = true;
-	std::vector<std::string> pmtnumber = {"2A","2B"};
+	std::vector<std::string> pmtnumber = {"1968","2905"};
 	std::vector<std::string> pmtmanufacturer = {"FEU", "FEU"};
 	std::vector<std::string> pmtpartnumber = {"84","84"};
-	std::vector<int> voltages = {1850,1850};
+	std::vector<int> voltages = {1750,1750};
 	std::map<int,std::string> labels;
 	std::string experimenttype = "Cosmics";
-	std::string trigger = "Discriminator";
-	double uppercutoffthreshold = 90;
+	std::string trigger = "Scope 30mv";
+	double uppercutoffthreshold = 450;
 	//std::vector<double> thresholds = {20,30,40,50,60,79};
-	std::vector<double> thresholds = {5,6,8,10,12,9};
-	int runnumber = 17;
+	std::vector<double> thresholds = {5,6,8,10,20,30};
+	int runnumber = 40;
 	std::vector<std::string> sthresholds;
 	int slidingwindowwidth = 7;
 	double timeoffset = 3; // [ns] Time after maximum for fit to continue
 	std::vector<double> fitmean = {0,0,0,0,0,0};
 	std::vector<double> fitsigma = {0,0,0,0,0,0};
 	std::vector<double> fitmaxX = {0,0,0,0,0,0};
-	int dccount = 500;
+	int dccount = 100;
 	datarun();
 	friend std::ostream& operator<<(std::ostream& os, const datarun& dr);
 };
@@ -322,6 +322,7 @@ int main(int argc, char* argv[])
 	TDirectory *ch1graphs = file->mkdir("Ch1_pulse_graphs");
 	TDirectory *ch2graphs = file->mkdir("Ch2_pulse_graphs");
 	TDirectory *timing = file->mkdir("Timing");
+	TDirectory *combinedgraphs = file->mkdir("Combined_Graphs");
 	
 	/* Save run parameters to root file */
 	TTree tree("setup", "Run information");
@@ -365,6 +366,19 @@ int main(int argc, char* argv[])
         /* Find the fit maximum and threshold positions in time */
 
 	std::cout << "Creating waveform graphs" << std::endl;
+	std::vector<double> special;
+	for(int i = 0; i < num; i++)
+	{
+			
+		double maxa = data[i].max[0];
+		double maxb = data[i].max[1];
+
+		if(maxa > 100 && maxb < 50)
+		{
+			std::cout << "Wavenumber " << i << " fits criteria" << std::endl;
+			special.push_back(i);
+		}
+	}
         
 	for(int channel = 0; channel < 2; channel++)
         {        
@@ -455,6 +469,42 @@ int main(int argc, char* argv[])
 			delete f1;
                 }
         }
+	/* construct graph of both channels */
+	std::cout << "Combined graphs" << std::endl;
+
+	combinedgraphs->cd();
+	/*TODO fix this */
+	for(unsigned int i = 0; i < special.size(); i++)
+	{
+		int graphwave = special[i];
+		std::string wnum = "Combined waveform" + std::to_string(i);
+		std::string cname = "waveform_" + std::to_string(i);
+		TCanvas* c10 = new TCanvas(cname.c_str(), wnum.c_str());
+		//TGraph* g30 = new TGraph(data[graphwave].time.size(), &data[graphwave].time[0], &data[graphwave].ch1[0]);
+		//TGraph* g31 = new TGraph(data[graphwave].time.size(), &data[graphwave].time[0], &data[graphwave].ch2[0]);
+		std::string tname = "waveform_" +std::to_string(i);
+		std::string tname2 = "waveform2_" +std::to_string(i);
+		TH2D* h10 = new TH2D(tname.c_str(), "test", 1001, data[i].time[0] - 20, data[i].time[999],256.0,0.0,200.0);
+		TH2D* h11 = new TH2D(tname2.c_str(), "test2", 1001, data[i].time[0]- 20, data[i].time[999],256,0,200);
+		for(int j = 0; j < 1000; j++)
+		{
+			h10->Fill(data[graphwave].time[j], data[graphwave].ch1[j]);
+			h11->Fill(data[graphwave].time[j], data[graphwave].ch2[j]);
+		}
+
+		h10->SetMarkerStyle(7);
+		h11->SetMarkerStyle(20);
+		h10->SetMarkerColor(4);
+		h10->Draw("AP");
+		h11->Draw("PSame");
+		c10->Write();
+
+		delete c10;
+		//delete g30;
+		//delete g31;
+		delete h10;
+		delete h11;
+	}
 
 
 	std::cout << "Pulse height histograms" << std::endl;
@@ -462,7 +512,7 @@ int main(int argc, char* argv[])
         /* construct histogram of pulse heights */
 	stats->cd();
 	std::string histname = "PH2";
-	std::string info = "Pulse Height for PMT-" + thisrun.pmtnumber[1] + thisrun.labels[1] + ", " + thisrun.pmtmanufacturer[1] + " " + thisrun.pmtpartnumber[1] + " at " + std::to_string(thisrun.voltages[1]) + "V";
+	std::string info = "Pulse Height for " + thisrun.pmtnumber[1] + ", " + thisrun.pmtmanufacturer[1] + " " + thisrun.pmtpartnumber[1] + " at " + std::to_string(thisrun.voltages[1]) + "V";
 	TH1D *h1 = new TH1D(histname.c_str(), info.c_str(), 3000, -1, 2000);
 	for(int i = 0; i < num ; i++)
 	{
@@ -470,12 +520,12 @@ int main(int argc, char* argv[])
 	}
 	h1->GetXaxis()->SetTitle("Maximum Waveform Height (mV)");
 	h1->GetYaxis()->SetTitle("Number of waveforms");
-	h1->Fit("gaus");
+	h1->Fit("landau");
 	h1->Write();
 	delete h1;
 	
 	histname = "PH1";
-	info = "Pulse Height for PMT-" + thisrun.pmtnumber[0] + thisrun.labels[0] + ", " + thisrun.pmtmanufacturer[0] + " " + thisrun.pmtpartnumber[0] + " at " + std::to_string(thisrun.voltages[0]) + "V";
+	info = "Pulse Height for " + thisrun.pmtnumber[0] + ", " + thisrun.pmtmanufacturer[0] + " " + thisrun.pmtpartnumber[0] + " at " + std::to_string(thisrun.voltages[0]) + "V";
 	TH1D *h2 = new TH1D(histname.c_str(), info.c_str(), 3000, -1, 2000);
 	for(int i = 0; i < num ; i++)
 	{
@@ -484,12 +534,12 @@ int main(int argc, char* argv[])
 
 	h2->GetXaxis()->SetTitle("Maximum Waveform Height (mV)");
 	h2->GetYaxis()->SetTitle("Number of waveforms");
-	h2->Fit("gaus");
+	h2->Fit("landau");
 	h2->Write();
 	delete h2;
 
 	std::cout << "Scatter plots" << std::endl;
-
+	// TODO change graph to histogram
 	/* Scatterplot of amplitudes of PMT's */
 	std::vector<double> max1;
 	std::vector<double> max2;
@@ -500,12 +550,12 @@ int main(int argc, char* argv[])
 		max2.push_back(data[i].fitmax[1]);
 	}
 	
-	TCanvas *c1 = new TCanvas("XY Plot", "PMT maximums XY plot");
+	TCanvas *c1 = new TCanvas("XY Plot", "Maximums XY plot");
 	TGraph * g1 = new TGraph(data.size(),&max1[0],&max2[0]);
-	std::string pmta = "PMT-" + thisrun.pmtnumber[0] + thisrun.labels[0] + " maximum [mV]";
-	std::string pmtb = "PMT-" + thisrun.pmtnumber[1] + thisrun.labels[1] + " maximum [mV]";
+	std::string pmta = thisrun.pmtnumber[0] + " maximum [mV]";
+	std::string pmtb = thisrun.pmtnumber[1] + " maximum [mV]";
 	g1->GetXaxis()->SetTitle(pmta.c_str());
-	g1->GetXaxis()->SetTitle("PMT Timing Difference");
+	//g1->GetXaxis()->SetTitle("PMT Timing Difference");
 	g1->GetYaxis()->SetTitle(pmtb.c_str());
         g1->SetMarkerStyle(7);
 	g1->SetDrawOption("AP");
@@ -523,13 +573,13 @@ int main(int argc, char* argv[])
 	for(unsigned int j =0; j < thisrun.thresholds.size(); j++)
 	{
 		std::string histname3 = "Timing Difference " + std::to_string(thisrun.thresholds[j]) + "mV";
-		std::string info3 = "Timing difference of PMT's at" + std::to_string(thisrun.thresholds[j]) + "mV";
+		std::string info3 = "Timing difference of devices at" + std::to_string(thisrun.thresholds[j]) + "mV";
 		TH1D *h4 = new TH1D(histname3.c_str(), info3.c_str(), 400, -100, 100);
 		for(int i = 0; i < num; i++)
 		{
 			h4->Fill(data[i].differences[j]);
 		}
-		h4->GetXaxis()->SetTitle("Timing difference PMT1B-PMT1A (ns)");
+		h4->GetXaxis()->SetTitle("Timing difference ch2 - ch1 (ns)");
 		h4->GetYaxis()->SetTitle("Number of waveforms");
 		h4->Fit("gaus");
 		h4->Write();
