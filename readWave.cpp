@@ -35,14 +35,14 @@ class datarun
 	std::vector<int> voltages = {1750,1750};
 	std::map<int,std::string> labels;
 	std::string experimenttype = "Cosmics";
-	std::string trigger = "Scope 30mv";
-	double uppercutoffthreshold = 450;
+	std::string trigger = "Discriminator 4mv";
+	double uppercutoffthreshold = 90;
 	//std::vector<double> thresholds = {20,30,40,50,60,79};
-	std::vector<double> thresholds = {5,6,8,10,20,30};
-	int runnumber = 40;
+	std::vector<double> thresholds = {1,2,3,4,5,4};
+	int runnumber = 70;
 	std::vector<std::string> sthresholds;
 	int slidingwindowwidth = 7;
-	double timeoffset = 3; // [ns] Time after maximum for fit to continue
+	double timeoffset = 1; // [ns] Time after maximum for fit to continue
 	std::vector<double> fitmean = {0,0,0,0,0,0};
 	std::vector<double> fitsigma = {0,0,0,0,0,0};
 	std::vector<double> fitmaxX = {0,0,0,0,0,0};
@@ -104,6 +104,7 @@ class package
 		std::vector<double> thresholdtimesch2 = {0,0,0,0,0,0};
 		std::vector<double> fitmax = {0,0};
 		std::vector<double> dcoffset = {0,0};
+		int length;
 		void setfilteredmax(double value, int channel);
 		void setnumberofthresholds(unsigned int num);
 };
@@ -205,6 +206,14 @@ int main(int argc, char* argv[])
 					ss >> trash >> trash >> trash >> ym; 
 					temp.ymulti.push_back(std::stod(ym));
 				}
+				else if (i==9)
+				{
+					std::stringstream ss(line);
+					std::string trash;
+					std::string length;
+					ss >> trash >> trash >> length;
+					temp.length = std::stoi(length);
+				}
 
 			}
 		}
@@ -216,6 +225,10 @@ int main(int argc, char* argv[])
 				std::getline(file,line);
 			}
                 }
+
+		if(temp.length == 0)
+			break;
+
 		const double scale = 1000; // scale to mV level
                 const double timescale = 1E9;
 		double mina(100),minb(100), maxa(-100), maxb(-100), tmaxa(0),tmaxb(0);
@@ -473,19 +486,16 @@ int main(int argc, char* argv[])
 	std::cout << "Combined graphs" << std::endl;
 
 	combinedgraphs->cd();
-	/*TODO fix this */
 	for(unsigned int i = 0; i < special.size(); i++)
 	{
 		int graphwave = special[i];
 		std::string wnum = "Combined waveform" + std::to_string(i);
 		std::string cname = "waveform_" + std::to_string(i);
 		TCanvas* c10 = new TCanvas(cname.c_str(), wnum.c_str());
-		//TGraph* g30 = new TGraph(data[graphwave].time.size(), &data[graphwave].time[0], &data[graphwave].ch1[0]);
-		//TGraph* g31 = new TGraph(data[graphwave].time.size(), &data[graphwave].time[0], &data[graphwave].ch2[0]);
 		std::string tname = "waveform_" +std::to_string(i);
 		std::string tname2 = "waveform2_" +std::to_string(i);
-		TH2D* h10 = new TH2D(tname.c_str(), "test", 1001, data[i].time[0] - 20, data[i].time[999],256.0,0.0,200.0);
-		TH2D* h11 = new TH2D(tname2.c_str(), "test2", 1001, data[i].time[0]- 20, data[i].time[999],256,0,200);
+		TH2D* h10 = new TH2D(tname.c_str(), "test", 1001, data[i].time[0] - 0.20, data[i].time[999],256.0,0.0,200.0);
+		TH2D* h11 = new TH2D(tname2.c_str(), "test2", 1001, data[i].time[0]- 0.20, data[i].time[999],256,0,200);
 		for(int j = 0; j < 1000; j++)
 		{
 			h10->Fill(data[graphwave].time[j], data[graphwave].ch1[j]);
@@ -500,8 +510,6 @@ int main(int argc, char* argv[])
 		c10->Write();
 
 		delete c10;
-		//delete g30;
-		//delete g31;
 		delete h10;
 		delete h11;
 	}
@@ -560,6 +568,7 @@ int main(int argc, char* argv[])
 	h20->SetMarkerStyle(20);
 	h20->GetXaxis()->SetTitle("ch1 amplitudes [mV]");
 	h20->GetYaxis()->SetTitle("ch2 amplitudes [mV]");
+	h20->SetFillColor(4);
 	h20->Draw("AP");
 	c20->Write();
 	delete h20;
